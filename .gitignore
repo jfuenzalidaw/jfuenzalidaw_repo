@@ -1,0 +1,9 @@
+# Local desktop app and imported Claude/Codex context files.
+CODEX_CONTEXT.md
+Yosemite Monitor*.pyw
+yosemite_monitor*.py
+yosemite_debug/
+
+# Python cache and local state.
+__pycache__/
+*.py[cod]
