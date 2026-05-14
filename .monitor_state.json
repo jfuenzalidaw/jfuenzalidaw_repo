@@ -1,0 +1,13 @@
+{
+  "campgrounds": [
+    "232450",
+    "232449",
+    "232447",
+    "232446"
+  ],
+  "checkin": "2026-05-15",
+  "checkout": "2026-05-18",
+  "enabled": false,
+  "last_alert_key": "",
+  "last_update_id": 0
+}
