@@ -7,7 +7,7 @@
   ],
   "checkin": "2026-05-15",
   "checkout": "2026-05-18",
-  "enabled": false,
+  "enabled": true,
   "last_alert_key": "",
-  "last_update_id": 0
+  "last_update_id": 55343144
 }
