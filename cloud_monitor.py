@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 import os
+import time
 from pathlib import Path
 
 import requests
@@ -250,11 +251,23 @@ def run_check(state: dict) -> None:
     checkin = dt.date.fromisoformat(state["checkin"])
     checkout = dt.date.fromisoformat(state["checkout"])
     available_map = {}
+    errors = []
     for cg_id in state["campgrounds"]:
-        sites = check_campground(cg_id, checkin, checkout)
-        print(f"{CAMPGROUNDS[cg_id]['name']}: {len(sites)} available")
-        if sites:
-            available_map[cg_id] = sites
+        try:
+            sites = check_campground(cg_id, checkin, checkout)
+            print(f"{CAMPGROUNDS[cg_id]['name']}: {len(sites)} available")
+            if sites:
+                available_map[cg_id] = sites
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            msg = f"{CAMPGROUNDS[cg_id]['name']}: HTTP {status}"
+            print(msg)
+            errors.append(msg)
+        except Exception as exc:
+            msg = f"{CAMPGROUNDS[cg_id]['name']}: {exc}"
+            print(msg)
+            errors.append(msg)
+        time.sleep(1.5)
 
     alert_key = "|".join(
         f"{cg_id}:{','.join(site['campsite_id'] for site in sites[:20])}"
@@ -276,6 +289,8 @@ def run_check(state: dict) -> None:
     elif not available_map and state.get("last_alert_key"):
         send_telegram("Previously found Yosemite spots are gone. Keeping watch.")
         state["last_alert_key"] = ""
+    elif errors:
+        print("Completed with non-fatal errors: " + "; ".join(errors))
 
 
 def main():
