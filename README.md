@@ -39,3 +39,34 @@ GitHub Actions scheduled workflows can run as often as every 5 minutes, but
 GitHub may delay scheduled jobs during busy periods. This monitor uses only the
 public availability API and Telegram Bot API. It does not log in to
 Recreation.gov, open a browser, or add campsites to a cart.
+
+## Reliable External Trigger
+
+If GitHub's native `schedule` trigger does not fire reliably, use any free cron
+service to call GitHub's dispatch API every 5 minutes.
+
+Request:
+
+```text
+POST https://api.github.com/repos/jfuenzalidaw/jfuenzalidaw_repo/dispatches
+```
+
+Headers:
+
+```text
+Accept: application/vnd.github+json
+Authorization: Bearer YOUR_FINE_GRAINED_GITHUB_TOKEN
+X-GitHub-Api-Version: 2022-11-28
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{"event_type":"yosemite-monitor"}
+```
+
+Create the token with access only to this repository and permission:
+
+- Contents: read-only
+- Actions: read/write
