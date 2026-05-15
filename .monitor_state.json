@@ -2,12 +2,11 @@
   "campgrounds": [
     "232450",
     "232449",
-    "232447",
-    "232446"
+    "232447"
   ],
   "checkin": "2026-05-22",
   "checkout": "2026-05-26",
   "enabled": true,
   "last_alert_key": "",
-  "last_update_id": 55343150
+  "last_update_id": 55343151
 }
