@@ -1,20 +1,21 @@
 import datetime as dt
 import json
 import os
+import re
 import time
 from pathlib import Path
 
 import requests
 
 
-CAMPGROUNDS = {
+YOSEMITE_CAMPGROUNDS = {
     "232450": {"name": "Lower Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232450"},
     "232449": {"name": "North Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232449"},
     "232447": {"name": "Upper Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232447"},
     "232446": {"name": "Wawona Campground", "url": "https://www.recreation.gov/camping/campgrounds/232446"},
 }
 
-ALIASES = {
+YOSEMITE_ALIASES = {
     "lower": "232450",
     "lowerpines": "232450",
     "north": "232449",
@@ -24,6 +25,13 @@ ALIASES = {
     "wawona": "232446",
 }
 
+PRAIRIE = {
+    "name": "Prairie Creek Redwoods SP Elk Prairie Campground",
+    "parks_page_id": "415",
+    "reserve_url": "https://reservecalifornia.com/park/696",
+    "availability_url": "https://www.parks.ca.gov/AvailabilityInfo",
+}
+
 AVAIL_API = "https://www.recreation.gov/api/camps/availability/campground/{id}/month"
 STATE_PATH = Path(".monitor_state.json")
 
@@ -31,20 +39,49 @@ STATE_PATH = Path(".monitor_state.json")
 def default_state() -> dict:
     today = dt.date.today()
     return {
-        "enabled": False,
-        "checkin": (today + dt.timedelta(days=1)).isoformat(),
-        "checkout": (today + dt.timedelta(days=4)).isoformat(),
-        "campgrounds": list(CAMPGROUNDS.keys()),
         "last_update_id": 0,
-        "last_alert_key": "",
+        "monitors": {
+            "yosemite": {
+                "enabled": False,
+                "checkin": (today + dt.timedelta(days=1)).isoformat(),
+                "checkout": (today + dt.timedelta(days=4)).isoformat(),
+                "campgrounds": list(YOSEMITE_CAMPGROUNDS.keys()),
+                "last_alert_key": "",
+            },
+            "prairie": {
+                "enabled": True,
+                "checkin": "2026-05-24",
+                "checkout": "2026-05-26",
+                "last_alert_key": "",
+            },
+        },
     }
+
+
+def migrate_state(raw: dict) -> dict:
+    state = default_state()
+    if "monitors" in raw:
+        state["last_update_id"] = raw.get("last_update_id", 0)
+        for name, monitor in raw.get("monitors", {}).items():
+            if name in state["monitors"]:
+                state["monitors"][name].update(monitor)
+        return state
+
+    # Backward compatibility with the original single Yosemite monitor state.
+    state["last_update_id"] = raw.get("last_update_id", 0)
+    state["monitors"]["yosemite"].update({
+        "enabled": raw.get("enabled", False),
+        "checkin": raw.get("checkin", state["monitors"]["yosemite"]["checkin"]),
+        "checkout": raw.get("checkout", state["monitors"]["yosemite"]["checkout"]),
+        "campgrounds": raw.get("campgrounds", list(YOSEMITE_CAMPGROUNDS.keys())),
+        "last_alert_key": raw.get("last_alert_key", ""),
+    })
+    return state
 
 
 def load_state() -> dict:
     if STATE_PATH.exists():
-        state = default_state()
-        state.update(json.loads(STATE_PATH.read_text(encoding="utf-8")))
-        return state
+        return migrate_state(json.loads(STATE_PATH.read_text(encoding="utf-8")))
     return default_state()
 
 
@@ -84,14 +121,14 @@ def get_updates(offset: int):
     return telegram_api("getUpdates", offset=offset, timeout=0, allowed_updates=json.dumps(["message"]))
 
 
-def base_headers() -> dict:
+def base_headers(origin: str = "https://www.recreation.gov/") -> dict:
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
+        "Accept": "application/json, text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.recreation.gov/",
-        "Origin": "https://www.recreation.gov",
+        "Referer": origin,
+        "Origin": origin.rstrip("/"),
     }
 
 
@@ -106,7 +143,7 @@ def month_starts_between(start: dt.date, end_exclusive: dt.date):
             cursor = dt.date(cursor.year, cursor.month + 1, 1)
 
 
-def check_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -> list[dict]:
+def check_yosemite_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -> list[dict]:
     nights = []
     day = checkin
     while day < checkout:
@@ -143,10 +180,44 @@ def check_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -> list[di
     return available
 
 
-def booking_url(cg_id: str, checkin: dt.date, checkout: dt.date) -> str:
+def check_prairie(checkin: dt.date, checkout: dt.date) -> dict:
+    # California State Parks' "length" parameter is inclusive of the arrival day.
+    length = (checkout - checkin).days + 1
+    params = {
+        "arrival_date": checkin.isoformat(),
+        "length": str(length),
+        "page_id": PRAIRIE["parks_page_id"],
+    }
+    resp = requests.get(
+        PRAIRIE["availability_url"],
+        params=params,
+        headers=base_headers("https://www.parks.ca.gov/"),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    text = re.sub(r"\s+", " ", resp.text)
+    match = re.search(r"Availability:\s*</?[^>]*>\s*<strong>\s*<span[^>]*>\s*(Yes|No)\s*</span>", text, re.I)
+    if not match:
+        match = re.search(r"Availability:\s*(Yes|No)", re.sub(r"<[^>]+>", " ", text), re.I)
+    if not match:
+        raise RuntimeError("Could not parse Prairie availability page")
+    is_available = match.group(1).lower() == "yes"
+    return {
+        "available": is_available,
+        "label": "Available" if is_available else "Not available",
+        "url": prairie_booking_url(checkin, checkout),
+    }
+
+
+def yosemite_booking_url(cg_id: str, checkin: dt.date, checkout: dt.date) -> str:
     ci = checkin.strftime("%m%%2F%d%%2F%Y")
     co = checkout.strftime("%m%%2F%d%%2F%Y")
-    return f"{CAMPGROUNDS[cg_id]['url']}?checkin={ci}&checkout={co}"
+    return f"{YOSEMITE_CAMPGROUNDS[cg_id]['url']}?checkin={ci}&checkout={co}"
+
+
+def prairie_booking_url(checkin: dt.date, checkout: dt.date) -> str:
+    # ReserveCalifornia's UI URL is the most useful target for the alert.
+    return f"{PRAIRIE['reserve_url']}?arrivalDate={checkin.isoformat()}&departureDate={checkout.isoformat()}"
 
 
 def format_sites(sites: list[dict], limit: int = 8) -> str:
@@ -164,14 +235,14 @@ def format_sites(sites: list[dict], limit: int = 8) -> str:
     return "\n".join(rows)
 
 
-def normalize_campgrounds(text: str) -> list[str] | None:
+def normalize_yosemite_campgrounds(text: str) -> list[str] | None:
     raw = text.strip().lower()
     if raw == "all":
-        return list(CAMPGROUNDS.keys())
+        return list(YOSEMITE_CAMPGROUNDS.keys())
     selected = []
     for part in raw.replace(",", " ").split():
         key = part.replace("-", "").replace("_", "").replace(" ", "")
-        cg_id = part if part in CAMPGROUNDS else ALIASES.get(key)
+        cg_id = part if part in YOSEMITE_CAMPGROUNDS else YOSEMITE_ALIASES.get(key)
         if not cg_id:
             return None
         if cg_id not in selected:
@@ -179,20 +250,44 @@ def normalize_campgrounds(text: str) -> list[str] | None:
     return selected
 
 
+def parse_target(rest: str, default: str = "all") -> tuple[list[str], str]:
+    parts = rest.split(maxsplit=1)
+    if not parts:
+        return ([default] if default != "all" else ["yosemite", "prairie"]), ""
+    first = parts[0].lower()
+    if first in {"all", "both"}:
+        return ["yosemite", "prairie"], parts[1] if len(parts) > 1 else ""
+    if first in {"yosemite", "prairie"}:
+        return [first], parts[1] if len(parts) > 1 else ""
+    return ([default] if default != "all" else ["yosemite", "prairie"]), rest
+
+
+def monitor_status(name: str, monitor: dict) -> str:
+    mode = "ON" if monitor["enabled"] else "OFF"
+    base = f"{name}: {mode}\nDates: {monitor['checkin']} to {monitor['checkout']}"
+    if name == "yosemite":
+        watched = "\n".join(f"- {YOSEMITE_CAMPGROUNDS[cg_id]['name']}" for cg_id in monitor["campgrounds"])
+        return f"{base}\nWatching:\n{watched}"
+    return f"{base}\nWatching:\n- {PRAIRIE['name']}"
+
+
 def status_text(state: dict) -> str:
-    watched = "\n".join(f"- {CAMPGROUNDS[cg_id]['name']}" for cg_id in state["campgrounds"])
-    mode = "ON" if state["enabled"] else "OFF"
+    blocks = [monitor_status(name, state["monitors"][name]) for name in ("yosemite", "prairie")]
     return (
-        f"Yosemite monitor: {mode}\n\n"
-        f"Dates: {state['checkin']} to {state['checkout']}\n\n"
-        f"Watching:\n{watched}\n\n"
-        "Commands: /start, /stop, /status, /check, "
-        "/dates YYYY-MM-DD YYYY-MM-DD, /campgrounds all|wawona|lower|north|upper"
+        "Campsite monitors\n\n"
+        + "\n\n".join(blocks)
+        + "\n\nCommands:\n"
+          "/start [all|yosemite|prairie]\n"
+          "/stop [all|yosemite|prairie]\n"
+          "/status\n"
+          "/check [all|yosemite|prairie]\n"
+          "/dates [yosemite|prairie] YYYY-MM-DD YYYY-MM-DD\n"
+          "/campgrounds yosemite all|wawona|lower|north|upper"
     )
 
 
-def process_commands(state: dict) -> bool:
-    force_check = False
+def process_commands(state: dict) -> list[str]:
+    force_checks: set[str] = set()
     updates = get_updates(int(state.get("last_update_id", 0)) + 1)
     for update in updates:
         state["last_update_id"] = max(int(state.get("last_update_id", 0)), int(update["update_id"]))
@@ -210,61 +305,75 @@ def process_commands(state: dict) -> bool:
         if command in {"/help", "/status"}:
             send_telegram(status_text(state))
         elif command in {"/start", "/on", "/start_monitor"}:
-            state["enabled"] = True
-            send_telegram("Yosemite monitor is ON.\n\n" + status_text(state))
-            force_check = True
+            targets, _ = parse_target(rest)
+            for target in targets:
+                state["monitors"][target]["enabled"] = True
+                force_checks.add(target)
+            send_telegram("Monitor enabled.\n\n" + status_text(state))
         elif command in {"/stop", "/off"}:
-            state["enabled"] = False
-            send_telegram("Yosemite monitor is OFF.")
+            targets, _ = parse_target(rest)
+            for target in targets:
+                state["monitors"][target]["enabled"] = False
+            send_telegram("Monitor disabled.\n\n" + status_text(state))
         elif command == "/check":
-            force_check = True
-            send_telegram("Running an availability check now.")
+            targets, _ = parse_target(rest)
+            force_checks.update(targets)
+            send_telegram("Running availability check for: " + ", ".join(targets))
         elif command == "/dates":
+            targets, date_args = parse_target(rest, default="yosemite")
+            if len(targets) != 1:
+                send_telegram("Usage: /dates yosemite YYYY-MM-DD YYYY-MM-DD or /dates prairie YYYY-MM-DD YYYY-MM-DD")
+                continue
             try:
-                ci_s, co_s = rest.split()[:2]
+                ci_s, co_s = date_args.split()[:2]
                 checkin = dt.date.fromisoformat(ci_s)
                 checkout = dt.date.fromisoformat(co_s)
                 if checkout <= checkin:
                     raise ValueError("checkout must be after checkin")
-                state["checkin"] = checkin.isoformat()
-                state["checkout"] = checkout.isoformat()
-                state["last_alert_key"] = ""
-                send_telegram(f"Dates updated: {state['checkin']} to {state['checkout']}")
-                force_check = True
+                monitor = state["monitors"][targets[0]]
+                monitor["checkin"] = checkin.isoformat()
+                monitor["checkout"] = checkout.isoformat()
+                monitor["last_alert_key"] = ""
+                force_checks.add(targets[0])
+                send_telegram(f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
             except Exception:
-                send_telegram("Usage: /dates YYYY-MM-DD YYYY-MM-DD")
+                send_telegram("Usage: /dates yosemite YYYY-MM-DD YYYY-MM-DD or /dates prairie YYYY-MM-DD YYYY-MM-DD")
         elif command == "/campgrounds":
-            selected = normalize_campgrounds(rest)
+            targets, cg_args = parse_target(rest, default="yosemite")
+            if targets != ["yosemite"]:
+                send_telegram("Campground selection is only supported for Yosemite.")
+                continue
+            selected = normalize_yosemite_campgrounds(cg_args)
             if not selected:
-                send_telegram("Usage: /campgrounds all OR /campgrounds wawona lower north upper")
+                send_telegram("Usage: /campgrounds yosemite all OR /campgrounds yosemite wawona lower north upper")
             else:
-                state["campgrounds"] = selected
-                state["last_alert_key"] = ""
-                send_telegram("Campgrounds updated.\n\n" + status_text(state))
-                force_check = True
+                state["monitors"]["yosemite"]["campgrounds"] = selected
+                state["monitors"]["yosemite"]["last_alert_key"] = ""
+                force_checks.add("yosemite")
+                send_telegram("Yosemite campgrounds updated.\n\n" + status_text(state))
         else:
             send_telegram("Unknown command.\n\n" + status_text(state))
-    return force_check
+    return sorted(force_checks)
 
 
-def run_check(state: dict) -> None:
-    checkin = dt.date.fromisoformat(state["checkin"])
-    checkout = dt.date.fromisoformat(state["checkout"])
+def run_yosemite_check(monitor: dict) -> None:
+    checkin = dt.date.fromisoformat(monitor["checkin"])
+    checkout = dt.date.fromisoformat(monitor["checkout"])
     available_map = {}
     errors = []
-    for cg_id in state["campgrounds"]:
+    for cg_id in monitor["campgrounds"]:
         try:
-            sites = check_campground(cg_id, checkin, checkout)
-            print(f"{CAMPGROUNDS[cg_id]['name']}: {len(sites)} available")
+            sites = check_yosemite_campground(cg_id, checkin, checkout)
+            print(f"{YOSEMITE_CAMPGROUNDS[cg_id]['name']}: {len(sites)} available")
             if sites:
                 available_map[cg_id] = sites
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else "unknown"
-            msg = f"{CAMPGROUNDS[cg_id]['name']}: HTTP {status}"
+            msg = f"{YOSEMITE_CAMPGROUNDS[cg_id]['name']}: HTTP {status}"
             print(msg)
             errors.append(msg)
         except Exception as exc:
-            msg = f"{CAMPGROUNDS[cg_id]['name']}: {exc}"
+            msg = f"{YOSEMITE_CAMPGROUNDS[cg_id]['name']}: {exc}"
             print(msg)
             errors.append(msg)
         time.sleep(1.5)
@@ -273,11 +382,11 @@ def run_check(state: dict) -> None:
         f"{cg_id}:{','.join(site['campsite_id'] for site in sites[:20])}"
         for cg_id, sites in sorted(available_map.items())
     )
-    if available_map and alert_key != state.get("last_alert_key", ""):
+    if available_map and alert_key != monitor.get("last_alert_key", ""):
         blocks = []
         for cg_id, sites in available_map.items():
             blocks.append(
-                f"<a href='{booking_url(cg_id, checkin, checkout)}'>{CAMPGROUNDS[cg_id]['name']}</a>\n"
+                f"<a href='{yosemite_booking_url(cg_id, checkin, checkout)}'>{YOSEMITE_CAMPGROUNDS[cg_id]['name']}</a>\n"
                 f"{format_sites(sites)}"
             )
         send_telegram(
@@ -285,21 +394,55 @@ def run_check(state: dict) -> None:
             f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}\n\n"
             f"Available:\n\n" + "\n\n".join(blocks) + "\n\nBook now!"
         )
-        state["last_alert_key"] = alert_key
-    elif not available_map and state.get("last_alert_key"):
+        monitor["last_alert_key"] = alert_key
+    elif not available_map and monitor.get("last_alert_key"):
         send_telegram("Previously found Yosemite spots are gone. Keeping watch.")
-        state["last_alert_key"] = ""
+        monitor["last_alert_key"] = ""
     elif errors:
-        print("Completed with non-fatal errors: " + "; ".join(errors))
+        print("Yosemite completed with non-fatal errors: " + "; ".join(errors))
+
+
+def run_prairie_check(monitor: dict) -> None:
+    checkin = dt.date.fromisoformat(monitor["checkin"])
+    checkout = dt.date.fromisoformat(monitor["checkout"])
+    result = check_prairie(checkin, checkout)
+    print(f"{PRAIRIE['name']}: {result['label']}")
+    alert_key = f"prairie:{monitor['checkin']}:{monitor['checkout']}:{result['available']}"
+    if result["available"] and alert_key != monitor.get("last_alert_key", ""):
+        send_telegram(
+            f"Prairie Creek campsite available!\n\n"
+            f"{PRAIRIE['name']}\n"
+            f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}\n\n"
+            f"<a href='{result['url']}'>Open ReserveCalifornia</a>"
+        )
+        monitor["last_alert_key"] = alert_key
+    elif not result["available"] and monitor.get("last_alert_key"):
+        send_telegram("Previously found Prairie Creek spot is gone. Keeping watch.")
+        monitor["last_alert_key"] = ""
+
+
+def run_checks(state: dict, force_checks: list[str]) -> None:
+    for name in ("yosemite", "prairie"):
+        monitor = state["monitors"][name]
+        if not monitor.get("enabled") and name not in force_checks:
+            print(f"{name} monitor is off")
+            continue
+        try:
+            if name == "yosemite":
+                run_yosemite_check(monitor)
+            else:
+                run_prairie_check(monitor)
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            print(f"{name} monitor HTTP error: {status}")
+        except Exception as exc:
+            print(f"{name} monitor error: {exc}")
 
 
 def main():
     state = load_state()
-    force_check = process_commands(state)
-    if state.get("enabled") or force_check:
-        run_check(state)
-    else:
-        print("Monitor is off. Send /start to Telegram to enable it.")
+    force_checks = process_commands(state)
+    run_checks(state, force_checks)
     save_state(state)
 
 

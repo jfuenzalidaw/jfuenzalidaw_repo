@@ -1,13 +1,23 @@
 {
-  "campgrounds": [
-    "232450",
-    "232449",
-    "232447",
-    "232446"
-  ],
-  "checkin": "2026-09-01",
-  "checkout": "2026-09-03",
-  "enabled": false,
-  "last_alert_key": "",
-  "last_update_id": 0
+  "last_update_id": 0,
+  "monitors": {
+    "prairie": {
+      "checkin": "2026-05-24",
+      "checkout": "2026-05-26",
+      "enabled": true,
+      "last_alert_key": ""
+    },
+    "yosemite": {
+      "campgrounds": [
+        "232450",
+        "232449",
+        "232447",
+        "232446"
+      ],
+      "checkin": "2026-09-01",
+      "checkout": "2026-09-03",
+      "enabled": false,
+      "last_alert_key": ""
+    }
+  }
 }

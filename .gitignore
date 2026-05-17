@@ -3,6 +3,7 @@ CODEX_CONTEXT.md
 Yosemite Monitor*.pyw
 yosemite_monitor*.py
 yosemite_debug/
+.playwright-mcp/
 
 # Python cache and local state.
 __pycache__/

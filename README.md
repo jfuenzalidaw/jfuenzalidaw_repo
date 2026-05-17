@@ -1,9 +1,14 @@
 # Yosemite Monitor
 
-Headless Recreation.gov availability monitor for GitHub Actions.
+Headless campsite availability monitor for GitHub Actions.
 
-The workflow runs every 5 minutes, checks Telegram commands, and sends Telegram
-alerts when matching Yosemite campsites are available.
+The workflow is triggered by cron-job.org, checks Telegram commands, and sends
+Telegram alerts when matching campsites are available.
+
+It currently supports:
+
+- `yosemite` - Recreation.gov Yosemite campgrounds
+- `prairie` - Prairie Creek Redwoods SP Elk Prairie Campground on ReserveCalifornia
 
 ## GitHub Secrets
 
@@ -18,27 +23,41 @@ Do not commit these values to the repository.
 
 Send commands to your bot:
 
-- `/start` - turn monitoring on and run a check
-- `/stop` - turn monitoring off
+- `/start all` - turn both monitors on and run checks
+- `/start yosemite` - turn Yosemite monitoring on
+- `/start prairie` - turn Prairie Creek monitoring on
+- `/stop all` - turn both monitors off
+- `/stop yosemite` - turn Yosemite monitoring off
+- `/stop prairie` - turn Prairie Creek monitoring off
 - `/status` - show current settings
-- `/check` - run one check on the next workflow run
-- `/dates 2026-09-01 2026-09-03` - set check-in/check-out dates
-- `/campgrounds all` - watch all configured campgrounds
-- `/campgrounds wawona lower north upper` - choose specific campgrounds
+- `/check all` - run one check for both monitors on the next workflow run
+- `/check yosemite` - run one Yosemite check
+- `/check prairie` - run one Prairie Creek check
+- `/dates yosemite 2026-09-01 2026-09-03` - set Yosemite dates
+- `/dates prairie 2026-05-24 2026-05-26` - set Prairie Creek dates
+- `/campgrounds yosemite all` - watch all configured Yosemite campgrounds
+- `/campgrounds yosemite wawona lower north upper` - choose specific Yosemite campgrounds
 
-The monitor watches these Recreation.gov campground IDs:
+The Yosemite monitor watches these Recreation.gov campground IDs:
 
 - `232450` - Lower Pines Campground
 - `232449` - North Pines Campground
 - `232447` - Upper Pines Campground
 - `232446` - Wawona Campground
 
+The Prairie Creek monitor uses:
+
+- California State Parks availability page id `415`
+- ReserveCalifornia park URL `https://reservecalifornia.com/park/696`
+
 ## Notes
 
 GitHub Actions scheduled workflows can run as often as every 5 minutes, but
-GitHub may delay scheduled jobs during busy periods. This monitor uses only the
-public availability API and Telegram Bot API. It does not log in to
-Recreation.gov, open a browser, or add campsites to a cart.
+GitHub may delay scheduled jobs during busy periods. This repo also supports a
+`repository_dispatch` trigger so cron-job.org can run it on a reliable external
+schedule. This monitor uses public availability pages/APIs and the Telegram Bot
+API. It does not log in to booking sites, open a browser, or add campsites to a
+cart.
 
 ## Reliable External Trigger
 
