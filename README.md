@@ -43,19 +43,21 @@ Send commands to your bot:
 - `/dates yosemite 2026-09-01 2026-09-03` - set Yosemite dates
 - `/dates prairie 2026-05-24 2026-05-26` - set Prairie Creek dates
 - `/dates gold 2026-05-23 2026-05-25` - set Gold Bluffs Beach dates
-- `/campgrounds yosemite all` - watch all configured Yosemite campgrounds
-- `/campgrounds yosemite list` - show all Yosemite campground options
-- `/campgrounds yosemite lower north upper` - choose specific Yosemite campgrounds
+- `/campgrounds yosemite all` - watch all configured Recreation.gov campgrounds
+- `/campgrounds yosemite list` - show all Recreation.gov campground options
+- `/campgrounds yosemite lower north upper summitnorth summitsouth` - choose specific Recreation.gov campgrounds
 - `/scheduler external` - use cron-job.org repository dispatch trigger
 - `/scheduler github` - use GitHub Actions' free 5-minute schedule
 - `/settings scheduler external` - same as `/scheduler external`
 - `/settings scheduler github` - same as `/scheduler github`
 
-The Yosemite monitor watches these Recreation.gov campground IDs:
+The Recreation.gov monitor watches these campground IDs:
 
 - `232450` - Lower Pines Campground
 - `232449` - North Pines Campground
 - `232447` - Upper Pines Campground
+- `234041` - Summit Lake North Campground
+- `234040` - Summit Lake South Campground
 
 The ReserveCalifornia monitors use:
 

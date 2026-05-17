@@ -12,6 +12,8 @@ YOSEMITE_CAMPGROUNDS = {
     "232450": {"name": "Lower Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232450"},
     "232449": {"name": "North Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232449"},
     "232447": {"name": "Upper Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232447"},
+    "234041": {"name": "Summit Lake North Campground", "url": "https://www.recreation.gov/camping/campgrounds/234041"},
+    "234040": {"name": "Summit Lake South Campground", "url": "https://www.recreation.gov/camping/campgrounds/234040"},
 }
 
 YOSEMITE_ALIASES = {
@@ -21,6 +23,13 @@ YOSEMITE_ALIASES = {
     "northpines": "232449",
     "upper": "232447",
     "upperpines": "232447",
+    "summit": "234041",
+    "summitnorth": "234041",
+    "summitlakenorth": "234041",
+    "northsummit": "234041",
+    "summitsouth": "234040",
+    "summitlakesouth": "234040",
+    "southsummit": "234040",
 }
 
 RESERVE_CA_AVAILABILITY_URL = "https://www.parks.ca.gov/AvailabilityInfo"
@@ -450,8 +459,8 @@ def help_text(state: dict) -> str:
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n\n"
         "Yosemite campgrounds\n"
         "- /campgrounds yosemite list - list supported campground names and aliases\n"
-        "- /campgrounds yosemite all - watch all supported Yosemite campgrounds\n"
-        "- /campgrounds yosemite lower north upper - choose specific campgrounds\n\n"
+        "- /campgrounds yosemite all - watch all supported Recreation.gov campgrounds\n"
+        "- /campgrounds yosemite lower north upper summitnorth summitsouth - choose specific campgrounds\n\n"
         "Scheduler\n"
         "- /scheduler external - use cron-job.org dispatch trigger\n"
         "- /scheduler github - use GitHub Actions 5-minute schedule\n"
@@ -551,7 +560,10 @@ def process_commands(state: dict) -> list[str]:
                 continue
             selected = normalize_yosemite_campgrounds(cg_args)
             if not selected:
-                send_telegram("Usage: /campgrounds yosemite list OR /campgrounds yosemite all OR /campgrounds yosemite lower north upper")
+                send_telegram(
+                    "Usage: /campgrounds yosemite list OR /campgrounds yosemite all OR "
+                    "/campgrounds yosemite lower north upper summitnorth summitsouth"
+                )
             else:
                 state["monitors"]["yosemite"]["campgrounds"] = selected
                 state["monitors"]["yosemite"]["last_alert_key"] = ""
