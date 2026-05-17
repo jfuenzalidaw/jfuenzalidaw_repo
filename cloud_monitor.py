@@ -31,6 +31,7 @@ PRAIRIE = {
 }
 
 AVAIL_API = "https://www.recreation.gov/api/camps/availability/campground/{id}/month"
+CRON_JOB_ORG_API = "https://api.cron-job.org"
 STATE_PATH = Path(".monitor_state.json")
 
 
@@ -117,6 +118,55 @@ def should_run_for_scheduler(state: dict) -> bool:
     if source == "manual":
         return True
     return source == state.get("scheduler", "external")
+
+
+def set_external_cron_enabled(enabled: bool) -> tuple[bool, str]:
+    api_key = os.getenv("CRON_JOB_ORG_API_KEY", "").strip()
+    job_id = os.getenv("CRON_JOB_ORG_JOB_ID", "").strip()
+    action = "enabled" if enabled else "paused"
+    if not api_key or not job_id:
+        return (
+            False,
+            "Missing CRON_JOB_ORG_API_KEY or CRON_JOB_ORG_JOB_ID, so cron-job.org was not "
+            f"{action}. Add the API key as a GitHub secret first.",
+        )
+
+    resp = requests.patch(
+        f"{CRON_JOB_ORG_API}/jobs/{job_id}",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={"job": {"enabled": enabled}},
+        timeout=20,
+    )
+    if resp.status_code >= 400:
+        return False, f"cron-job.org returned HTTP {resp.status_code}; scheduler was not changed."
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = {}
+    if payload not in ({}, None):
+        return False, f"Unexpected cron-job.org response: {payload}; scheduler was not changed."
+    return True, f"cron-job.org job {job_id} {action}."
+
+
+def switch_scheduler(state: dict, scheduler: str) -> tuple[bool, str]:
+    if scheduler == state.get("scheduler", "external"):
+        return True, "Scheduler already set: " + scheduler_label(scheduler)
+
+    if scheduler == "github":
+        ok, cron_message = set_external_cron_enabled(False)
+        if not ok:
+            return False, cron_message
+        state["scheduler"] = "github"
+        return True, "Scheduler updated: " + scheduler_label(scheduler) + "\n" + cron_message
+
+    ok, cron_message = set_external_cron_enabled(True)
+    if not ok:
+        return False, cron_message
+    state["scheduler"] = "external"
+    return True, "Scheduler updated: " + scheduler_label(scheduler) + "\n" + cron_message
 
 
 def load_state() -> dict:
@@ -380,8 +430,10 @@ def process_commands(state: dict) -> list[str]:
                     + "\n\nUsage: /scheduler external OR /scheduler github"
                 )
                 continue
-            state["scheduler"] = scheduler
-            send_telegram("Scheduler updated: " + scheduler_label(scheduler))
+            ok, message = switch_scheduler(state, scheduler)
+            send_telegram(message)
+            if not ok:
+                continue
         elif command == "/settings":
             setting, _, value = rest.strip().partition(" ")
             if setting.lower() != "scheduler":
@@ -391,8 +443,10 @@ def process_commands(state: dict) -> list[str]:
             if not scheduler:
                 send_telegram("Usage: /settings scheduler external OR /settings scheduler github")
                 continue
-            state["scheduler"] = scheduler
-            send_telegram("Scheduler updated: " + scheduler_label(scheduler))
+            ok, message = switch_scheduler(state, scheduler)
+            send_telegram(message)
+            if not ok:
+                continue
         elif command == "/dates":
             targets, date_args = parse_target(rest, default="yosemite")
             if len(targets) != 1:

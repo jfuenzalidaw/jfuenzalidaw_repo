@@ -16,6 +16,7 @@ Add these repository secrets in GitHub:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+- `CRON_JOB_ORG_API_KEY` - optional, required for `/scheduler github` to pause cron-job.org and `/scheduler external` to re-enable it
 
 Do not commit these values to the repository.
 
@@ -63,6 +64,10 @@ schedule. Use `/scheduler external` or `/scheduler github` in Telegram to choose
 which trigger should perform real checks. This monitor uses public availability
 pages/APIs and the Telegram Bot API. It does not log in to booking sites, open a
 browser, or add campsites to a cart.
+
+If `CRON_JOB_ORG_API_KEY` is configured, `/scheduler github` also pauses the
+cron-job.org job and `/scheduler external` enables it again. The workflow passes
+the cron-job.org job id `7604120` as `CRON_JOB_ORG_JOB_ID`.
 
 ## Reliable External Trigger
 
