@@ -88,7 +88,6 @@ MONITOR_ALIASES = {
 }
 
 AVAIL_API = "https://www.recreation.gov/api/camps/availability/campground/{id}/month"
-CRON_JOB_ORG_API = "https://api.cron-job.org"
 STATE_PATH = Path(".monitor_state.json")
 
 
@@ -102,7 +101,6 @@ def default_state() -> dict:
     }
     return {
         "last_update_id": 0,
-        "scheduler": "external",
         "monitors": {
             "upper_yosemite": dict(recreation_dates),
             "north_yosemite": dict(recreation_dates),
@@ -154,7 +152,6 @@ def migrate_state(raw: dict) -> dict:
     state = default_state()
     if "monitors" in raw:
         state["last_update_id"] = raw.get("last_update_id", 0)
-        state["scheduler"] = normalize_scheduler(raw.get("scheduler", "")) or state["scheduler"]
         monitors = raw.get("monitors", {})
         for name, monitor in monitors.items():
             if name in state["monitors"]:
@@ -167,7 +164,6 @@ def migrate_state(raw: dict) -> dict:
 
     # Backward compatibility with the original single Yosemite monitor state.
     state["last_update_id"] = raw.get("last_update_id", 0)
-    state["scheduler"] = normalize_scheduler(raw.get("scheduler", "")) or state["scheduler"]
     migrate_old_yosemite_group(state, {
         "enabled": raw.get("enabled", False),
         "checkin": raw.get("checkin"),
@@ -175,86 +171,6 @@ def migrate_state(raw: dict) -> dict:
         "campgrounds": raw.get("campgrounds", [config["facility_id"] for config in RECREATION_GOV_MONITORS.values()]),
     })
     return state
-
-
-def normalize_scheduler(value: str) -> str | None:
-    key = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
-    if key in {"external", "cron", "cronjob", "cron_job", "cronjoborg", "cron_job_org"}:
-        return "external"
-    if key in {"github", "github_actions", "actions", "schedule", "scheduled"}:
-        return "github"
-    return None
-
-
-def scheduler_label(value: str) -> str:
-    if value == "github":
-        return "GitHub Actions schedule (every 5 minutes)"
-    return "External cron-job.org dispatch (currently every 2 minutes)"
-
-
-def trigger_source() -> str:
-    event_name = os.getenv("GITHUB_EVENT_NAME", "").strip()
-    if event_name == "schedule":
-        return "github"
-    if event_name == "repository_dispatch":
-        return "external"
-    return "manual"
-
-
-def should_run_for_scheduler(state: dict) -> bool:
-    source = trigger_source()
-    if source == "manual":
-        return True
-    return source == state.get("scheduler", "external")
-
-
-def set_external_cron_enabled(enabled: bool) -> tuple[bool, str]:
-    api_key = os.getenv("CRON_JOB_ORG_API_KEY", "").strip()
-    job_id = os.getenv("CRON_JOB_ORG_JOB_ID", "").strip()
-    action = "enabled" if enabled else "paused"
-    if not api_key or not job_id:
-        return (
-            False,
-            "Missing CRON_JOB_ORG_API_KEY or CRON_JOB_ORG_JOB_ID, so cron-job.org was not "
-            f"{action}. Add the API key as a GitHub secret first.",
-        )
-
-    resp = requests.patch(
-        f"{CRON_JOB_ORG_API}/jobs/{job_id}",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={"job": {"enabled": enabled}},
-        timeout=20,
-    )
-    if resp.status_code >= 400:
-        return False, f"cron-job.org returned HTTP {resp.status_code}; scheduler was not changed."
-    try:
-        payload = resp.json()
-    except ValueError:
-        payload = {}
-    if payload not in ({}, None):
-        return False, f"Unexpected cron-job.org response: {payload}; scheduler was not changed."
-    return True, f"cron-job.org job {job_id} {action}."
-
-
-def switch_scheduler(state: dict, scheduler: str) -> tuple[bool, str]:
-    if scheduler == state.get("scheduler", "external"):
-        return True, "Scheduler already set: " + scheduler_label(scheduler)
-
-    if scheduler == "github":
-        ok, cron_message = set_external_cron_enabled(False)
-        if not ok:
-            return False, cron_message
-        state["scheduler"] = "github"
-        return True, "Scheduler updated: " + scheduler_label(scheduler) + "\n" + cron_message
-
-    ok, cron_message = set_external_cron_enabled(True)
-    if not ok:
-        return False, cron_message
-    state["scheduler"] = "external"
-    return True, "Scheduler updated: " + scheduler_label(scheduler) + "\n" + cron_message
 
 
 def load_state() -> dict:
@@ -463,7 +379,7 @@ def status_text(state: dict) -> str:
     blocks = [monitor_status(name, state["monitors"][name]) for name in monitor_targets()]
     return (
         "Campsite monitors\n\n"
-        + f"Scheduler: {scheduler_label(state.get('scheduler', 'external'))}\n\n"
+        + "Trigger: external cron-job.org dispatch\n\n"
         + "\n\n".join(blocks)
         + "\n\nUse /help for all commands."
     )
@@ -473,7 +389,7 @@ def help_text(state: dict) -> str:
     return (
         "Campsite monitor commands\n\n"
         "Status\n"
-        "- /status - show active scheduler, dates, and watched campgrounds\n"
+        "- /status - show trigger, dates, and watched campsites\n"
         "- /help - show this command guide\n\n"
         "Turn monitors on/off\n"
         "- /start all - turn on every campsite\n"
@@ -493,13 +409,7 @@ def help_text(state: dict) -> str:
         "Change dates\n"
         "- /dates upper yosemite 2026-05-22 2026-05-26\n"
         "- /dates prairie redwoods 2026-05-24 2026-05-26\n"
-        "Dates use YYYY-MM-DD. Checkout must be after checkin.\n\n"
-        "Scheduler\n"
-        "- /scheduler external - use cron-job.org dispatch trigger\n"
-        "- /scheduler github - use GitHub Actions 5-minute schedule\n"
-        "- /settings scheduler external - same as /scheduler external\n"
-        "- /settings scheduler github - same as /scheduler github\n\n"
-        f"Current scheduler: {scheduler_label(state.get('scheduler', 'external'))}"
+        "Dates use YYYY-MM-DD. Checkout must be after checkin."
     )
 
 
@@ -540,32 +450,8 @@ def process_commands(state: dict) -> list[str]:
             send_telegram("Running availability check for: " + ", ".join(targets))
         elif command in {"/monitors", "/list"}:
             send_telegram(monitors_text())
-        elif command in {"/scheduler", "/schedule"}:
-            scheduler = normalize_scheduler(rest)
-            if not scheduler:
-                send_telegram(
-                    "Current scheduler: "
-                    + scheduler_label(state.get("scheduler", "external"))
-                    + "\n\nUsage: /scheduler external OR /scheduler github"
-                )
-                continue
-            ok, message = switch_scheduler(state, scheduler)
-            send_telegram(message)
-            if not ok:
-                continue
         elif command == "/settings":
-            setting, _, value = rest.strip().partition(" ")
-            if setting.lower() != "scheduler":
-                send_telegram("Usage: /settings scheduler external OR /settings scheduler github")
-                continue
-            scheduler = normalize_scheduler(value)
-            if not scheduler:
-                send_telegram("Usage: /settings scheduler external OR /settings scheduler github")
-                continue
-            ok, message = switch_scheduler(state, scheduler)
-            send_telegram(message)
-            if not ok:
-                continue
+            send_telegram("Settings are managed in GitHub/cron-job.org now. Use /help for bot commands.")
         elif command == "/dates":
             targets, date_args = parse_target(rest)
             if len(targets) != 1:
@@ -653,14 +539,6 @@ def run_checks(state: dict, force_checks: list[str]) -> None:
 
 def main():
     state = load_state()
-    if not should_run_for_scheduler(state):
-        print(
-            "Skipping "
-            f"{trigger_source()} trigger because scheduler is set to "
-            f"{state.get('scheduler', 'external')}"
-        )
-        save_state(state)
-        return
     force_checks = process_commands(state)
     run_checks(state, force_checks)
     save_state(state)

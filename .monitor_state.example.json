@@ -43,6 +43,5 @@
       "enabled": false,
       "last_alert_key": ""
     }
-  },
-  "scheduler": "external"
+  }
 }
