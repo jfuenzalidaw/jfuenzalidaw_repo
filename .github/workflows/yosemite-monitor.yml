@@ -44,10 +44,17 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
           git add .monitor_state.json
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
             git commit -m "Update Yosemite monitor state"
-            git push
+            for attempt in 1 2 3; do
+              if git push; then
+                break
+              fi
+              git pull --rebase origin main
+              sleep 2
+            done
           fi
