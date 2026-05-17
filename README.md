@@ -36,14 +36,14 @@ Send commands to your bot:
 - `/dates yosemite 2026-09-01 2026-09-03` - set Yosemite dates
 - `/dates prairie 2026-05-24 2026-05-26` - set Prairie Creek dates
 - `/campgrounds yosemite all` - watch all configured Yosemite campgrounds
-- `/campgrounds yosemite wawona lower north upper` - choose specific Yosemite campgrounds
+- `/campgrounds yosemite list` - show all Yosemite campground options
+- `/campgrounds yosemite lower north upper` - choose specific Yosemite campgrounds
 
 The Yosemite monitor watches these Recreation.gov campground IDs:
 
 - `232450` - Lower Pines Campground
 - `232449` - North Pines Campground
 - `232447` - Upper Pines Campground
-- `232446` - Wawona Campground
 
 The Prairie Creek monitor uses:
 

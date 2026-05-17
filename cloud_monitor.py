@@ -12,7 +12,6 @@ YOSEMITE_CAMPGROUNDS = {
     "232450": {"name": "Lower Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232450"},
     "232449": {"name": "North Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232449"},
     "232447": {"name": "Upper Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232447"},
-    "232446": {"name": "Wawona Campground", "url": "https://www.recreation.gov/camping/campgrounds/232446"},
 }
 
 YOSEMITE_ALIASES = {
@@ -22,7 +21,6 @@ YOSEMITE_ALIASES = {
     "northpines": "232449",
     "upper": "232447",
     "upperpines": "232447",
-    "wawona": "232446",
 }
 
 PRAIRIE = {
@@ -58,6 +56,12 @@ def default_state() -> dict:
     }
 
 
+def sanitize_yosemite_monitor(monitor: dict) -> None:
+    supported = list(YOSEMITE_CAMPGROUNDS.keys())
+    selected = [cg_id for cg_id in monitor.get("campgrounds", []) if cg_id in YOSEMITE_CAMPGROUNDS]
+    monitor["campgrounds"] = selected or supported
+
+
 def migrate_state(raw: dict) -> dict:
     state = default_state()
     if "monitors" in raw:
@@ -65,6 +69,7 @@ def migrate_state(raw: dict) -> dict:
         for name, monitor in raw.get("monitors", {}).items():
             if name in state["monitors"]:
                 state["monitors"][name].update(monitor)
+        sanitize_yosemite_monitor(state["monitors"]["yosemite"])
         return state
 
     # Backward compatibility with the original single Yosemite monitor state.
@@ -76,6 +81,7 @@ def migrate_state(raw: dict) -> dict:
         "campgrounds": raw.get("campgrounds", list(YOSEMITE_CAMPGROUNDS.keys())),
         "last_alert_key": raw.get("last_alert_key", ""),
     })
+    sanitize_yosemite_monitor(state["monitors"]["yosemite"])
     return state
 
 
@@ -250,6 +256,15 @@ def normalize_yosemite_campgrounds(text: str) -> list[str] | None:
     return selected
 
 
+def yosemite_campgrounds_text() -> str:
+    rows = []
+    for cg_id, campground in YOSEMITE_CAMPGROUNDS.items():
+        aliases = sorted(alias for alias, alias_id in YOSEMITE_ALIASES.items() if alias_id == cg_id)
+        alias_text = ", ".join(aliases)
+        rows.append(f"- {campground['name']} ({cg_id}) aliases: {alias_text}")
+    return "Yosemite campground options:\n" + "\n".join(rows)
+
+
 def parse_target(rest: str, default: str = "all") -> tuple[list[str], str]:
     parts = rest.split(maxsplit=1)
     if not parts:
@@ -282,7 +297,7 @@ def status_text(state: dict) -> str:
           "/status\n"
           "/check [all|yosemite|prairie]\n"
           "/dates [yosemite|prairie] YYYY-MM-DD YYYY-MM-DD\n"
-          "/campgrounds yosemite all|wawona|lower|north|upper"
+          "/campgrounds yosemite all|list|lower|north|upper"
     )
 
 
@@ -343,9 +358,12 @@ def process_commands(state: dict) -> list[str]:
             if targets != ["yosemite"]:
                 send_telegram("Campground selection is only supported for Yosemite.")
                 continue
+            if cg_args.strip().lower() == "list":
+                send_telegram(yosemite_campgrounds_text())
+                continue
             selected = normalize_yosemite_campgrounds(cg_args)
             if not selected:
-                send_telegram("Usage: /campgrounds yosemite all OR /campgrounds yosemite wawona lower north upper")
+                send_telegram("Usage: /campgrounds yosemite list OR /campgrounds yosemite all OR /campgrounds yosemite lower north upper")
             else:
                 state["monitors"]["yosemite"]["campgrounds"] = selected
                 state["monitors"]["yosemite"]["last_alert_key"] = ""
