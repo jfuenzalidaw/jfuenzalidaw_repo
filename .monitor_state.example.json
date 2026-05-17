@@ -2,6 +2,12 @@
   "last_update_id": 0,
   "scheduler": "external",
   "monitors": {
+    "gold_bluffs": {
+      "checkin": "2026-05-23",
+      "checkout": "2026-05-25",
+      "enabled": true,
+      "last_alert_key": ""
+    },
     "prairie": {
       "checkin": "2026-05-24",
       "checkout": "2026-05-26",

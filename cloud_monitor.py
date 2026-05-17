@@ -23,11 +23,31 @@ YOSEMITE_ALIASES = {
     "upperpines": "232447",
 }
 
-PRAIRIE = {
-    "name": "Prairie Creek Redwoods SP Elk Prairie Campground",
-    "parks_page_id": "415",
-    "reserve_url": "https://reservecalifornia.com/park/696",
-    "availability_url": "https://www.parks.ca.gov/AvailabilityInfo",
+RESERVE_CA_AVAILABILITY_URL = "https://www.parks.ca.gov/AvailabilityInfo"
+
+RESERVE_CA_MONITORS = {
+    "prairie": {
+        "name": "Prairie Creek Redwoods SP Elk Prairie Campground",
+        "parks_page_id": "415",
+        "campground_anchor": "g-631",
+        "reserve_url": "https://reservecalifornia.com/park/696",
+    },
+    "gold_bluffs": {
+        "name": "Prairie Creek Redwoods SP Gold Bluffs Beach Camp",
+        "parks_page_id": "415",
+        "campground_anchor": "g-632",
+        "reserve_url": "https://reservecalifornia.com/park/697",
+    },
+}
+
+MONITOR_ALIASES = {
+    "yosemite": "yosemite",
+    "prairie": "prairie",
+    "elk": "prairie",
+    "elk_prairie": "prairie",
+    "gold": "gold_bluffs",
+    "gold_bluffs": "gold_bluffs",
+    "goldbluffs": "gold_bluffs",
 }
 
 AVAIL_API = "https://www.recreation.gov/api/camps/availability/campground/{id}/month"
@@ -52,6 +72,12 @@ def default_state() -> dict:
                 "enabled": True,
                 "checkin": "2026-05-24",
                 "checkout": "2026-05-26",
+                "last_alert_key": "",
+            },
+            "gold_bluffs": {
+                "enabled": True,
+                "checkin": "2026-05-23",
+                "checkout": "2026-05-25",
                 "last_alert_key": "",
             },
         },
@@ -270,32 +296,36 @@ def check_yosemite_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -
     return available
 
 
-def check_prairie(checkin: dt.date, checkout: dt.date) -> dict:
+def check_reserve_ca(monitor_name: str, checkin: dt.date, checkout: dt.date) -> dict:
+    config = RESERVE_CA_MONITORS[monitor_name]
     # California State Parks' "length" parameter is inclusive of the arrival day.
     length = (checkout - checkin).days + 1
     params = {
         "arrival_date": checkin.isoformat(),
         "length": str(length),
-        "page_id": PRAIRIE["parks_page_id"],
+        "page_id": config["parks_page_id"],
     }
     resp = requests.get(
-        PRAIRIE["availability_url"],
+        RESERVE_CA_AVAILABILITY_URL,
         params=params,
         headers=base_headers("https://www.parks.ca.gov/"),
         timeout=20,
     )
     resp.raise_for_status()
     text = re.sub(r"\s+", " ", resp.text)
-    match = re.search(r"Availability:\s*</?[^>]*>\s*<strong>\s*<span[^>]*>\s*(Yes|No)\s*</span>", text, re.I)
+    plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text))
+    match = re.search(r"Availability:\s*(Yes|No)", plain, re.I)
     if not match:
-        match = re.search(r"Availability:\s*(Yes|No)", re.sub(r"<[^>]+>", " ", text), re.I)
-    if not match:
-        raise RuntimeError("Could not parse Prairie availability page")
-    is_available = match.group(1).lower() == "yes"
+        raise RuntimeError(f"Could not parse {config['name']} availability page")
+
+    overall_available = match.group(1).lower() == "yes"
+    available_section = text[text.find("Available Campgrounds"):] if "Available Campgrounds" in text else ""
+    campground_available = f"href=\"#{config['campground_anchor']}\"" in available_section
+    is_available = overall_available and campground_available
     return {
         "available": is_available,
         "label": "Available" if is_available else "Not available",
-        "url": prairie_booking_url(checkin, checkout),
+        "url": reserve_ca_booking_url(monitor_name, checkin, checkout),
     }
 
 
@@ -305,9 +335,12 @@ def yosemite_booking_url(cg_id: str, checkin: dt.date, checkout: dt.date) -> str
     return f"{YOSEMITE_CAMPGROUNDS[cg_id]['url']}?checkin={ci}&checkout={co}"
 
 
-def prairie_booking_url(checkin: dt.date, checkout: dt.date) -> str:
+def reserve_ca_booking_url(monitor_name: str, checkin: dt.date, checkout: dt.date) -> str:
     # ReserveCalifornia's UI URL is the most useful target for the alert.
-    return f"{PRAIRIE['reserve_url']}?arrivalDate={checkin.isoformat()}&departureDate={checkout.isoformat()}"
+    return (
+        f"{RESERVE_CA_MONITORS[monitor_name]['reserve_url']}"
+        f"?arrivalDate={checkin.isoformat()}&departureDate={checkout.isoformat()}"
+    )
 
 
 def format_sites(sites: list[dict], limit: int = 8) -> str:
@@ -349,16 +382,26 @@ def yosemite_campgrounds_text() -> str:
     return "Yosemite campground options:\n" + "\n".join(rows)
 
 
+def monitor_targets() -> list[str]:
+    return ["yosemite", *RESERVE_CA_MONITORS.keys()]
+
+
+def normalize_monitor_target(value: str) -> str | None:
+    key = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    return MONITOR_ALIASES.get(key)
+
+
 def parse_target(rest: str, default: str = "all") -> tuple[list[str], str]:
     parts = rest.split(maxsplit=1)
     if not parts:
-        return ([default] if default != "all" else ["yosemite", "prairie"]), ""
+        return ([default] if default != "all" else monitor_targets()), ""
     first = parts[0].lower()
     if first in {"all", "both"}:
-        return ["yosemite", "prairie"], parts[1] if len(parts) > 1 else ""
-    if first in {"yosemite", "prairie"}:
-        return [first], parts[1] if len(parts) > 1 else ""
-    return ([default] if default != "all" else ["yosemite", "prairie"]), rest
+        return monitor_targets(), parts[1] if len(parts) > 1 else ""
+    target = normalize_monitor_target(first)
+    if target:
+        return [target], parts[1] if len(parts) > 1 else ""
+    return ([default] if default != "all" else monitor_targets()), rest
 
 
 def monitor_status(name: str, monitor: dict) -> str:
@@ -367,11 +410,11 @@ def monitor_status(name: str, monitor: dict) -> str:
     if name == "yosemite":
         watched = "\n".join(f"- {YOSEMITE_CAMPGROUNDS[cg_id]['name']}" for cg_id in monitor["campgrounds"])
         return f"{base}\nWatching:\n{watched}"
-    return f"{base}\nWatching:\n- {PRAIRIE['name']}"
+    return f"{base}\nWatching:\n- {RESERVE_CA_MONITORS[name]['name']}"
 
 
 def status_text(state: dict) -> str:
-    blocks = [monitor_status(name, state["monitors"][name]) for name in ("yosemite", "prairie")]
+    blocks = [monitor_status(name, state["monitors"][name]) for name in monitor_targets()]
     return (
         "Campsite monitors\n\n"
         + f"Scheduler: {scheduler_label(state.get('scheduler', 'external'))}\n\n"
@@ -387,19 +430,23 @@ def help_text(state: dict) -> str:
         "- /status - show active scheduler, dates, and watched campgrounds\n"
         "- /help - show this command guide\n\n"
         "Turn monitors on/off\n"
-        "- /start all - turn on Yosemite and Prairie Creek\n"
+        "- /start all - turn on Yosemite, Elk Prairie, and Gold Bluffs\n"
         "- /start yosemite - turn on Yosemite only\n"
-        "- /start prairie - turn on Prairie Creek only\n"
-        "- /stop all - turn off both monitors\n"
+        "- /start prairie - turn on Elk Prairie only\n"
+        "- /start gold - turn on Gold Bluffs Beach only\n"
+        "- /stop all - turn off all monitors\n"
         "- /stop yosemite - turn off Yosemite only\n"
-        "- /stop prairie - turn off Prairie Creek only\n\n"
+        "- /stop prairie - turn off Elk Prairie only\n"
+        "- /stop gold - turn off Gold Bluffs Beach only\n\n"
         "Run a check\n"
-        "- /check all - check both monitors on the next workflow run\n"
+        "- /check all - check every monitor on the next workflow run\n"
         "- /check yosemite - check Yosemite once\n"
-        "- /check prairie - check Prairie Creek once\n\n"
+        "- /check prairie - check Elk Prairie once\n"
+        "- /check gold - check Gold Bluffs Beach once\n\n"
         "Change dates\n"
         "- /dates yosemite 2026-09-01 2026-09-03\n"
         "- /dates prairie 2026-05-24 2026-05-26\n"
+        "- /dates gold 2026-05-23 2026-05-25\n"
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n\n"
         "Yosemite campgrounds\n"
         "- /campgrounds yosemite list - list supported campground names and aliases\n"
@@ -478,7 +525,7 @@ def process_commands(state: dict) -> list[str]:
         elif command == "/dates":
             targets, date_args = parse_target(rest, default="yosemite")
             if len(targets) != 1:
-                send_telegram("Usage: /dates yosemite YYYY-MM-DD YYYY-MM-DD or /dates prairie YYYY-MM-DD YYYY-MM-DD")
+                send_telegram("Usage: /dates yosemite|prairie|gold YYYY-MM-DD YYYY-MM-DD")
                 continue
             try:
                 ci_s, co_s = date_args.split()[:2]
@@ -493,7 +540,7 @@ def process_commands(state: dict) -> list[str]:
                 force_checks.add(targets[0])
                 send_telegram(f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
             except Exception:
-                send_telegram("Usage: /dates yosemite YYYY-MM-DD YYYY-MM-DD or /dates prairie YYYY-MM-DD YYYY-MM-DD")
+                send_telegram("Usage: /dates yosemite|prairie|gold YYYY-MM-DD YYYY-MM-DD")
         elif command == "/campgrounds":
             targets, cg_args = parse_target(rest, default="yosemite")
             if targets != ["yosemite"]:
@@ -561,27 +608,28 @@ def run_yosemite_check(monitor: dict) -> None:
         print("Yosemite completed with non-fatal errors: " + "; ".join(errors))
 
 
-def run_prairie_check(monitor: dict) -> None:
+def run_reserve_ca_check(name: str, monitor: dict) -> None:
+    config = RESERVE_CA_MONITORS[name]
     checkin = dt.date.fromisoformat(monitor["checkin"])
     checkout = dt.date.fromisoformat(monitor["checkout"])
-    result = check_prairie(checkin, checkout)
-    print(f"{PRAIRIE['name']}: {result['label']}")
-    alert_key = f"prairie:{monitor['checkin']}:{monitor['checkout']}:{result['available']}"
+    result = check_reserve_ca(name, checkin, checkout)
+    print(f"{config['name']}: {result['label']}")
+    alert_key = f"{name}:{monitor['checkin']}:{monitor['checkout']}:{result['available']}"
     if result["available"] and alert_key != monitor.get("last_alert_key", ""):
         send_telegram(
-            f"Prairie Creek campsite available!\n\n"
-            f"{PRAIRIE['name']}\n"
+            f"ReserveCalifornia campsite available!\n\n"
+            f"{config['name']}\n"
             f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}\n\n"
             f"<a href='{result['url']}'>Open ReserveCalifornia</a>"
         )
         monitor["last_alert_key"] = alert_key
     elif not result["available"] and monitor.get("last_alert_key"):
-        send_telegram("Previously found Prairie Creek spot is gone. Keeping watch.")
+        send_telegram(f"Previously found {config['name']} spot is gone. Keeping watch.")
         monitor["last_alert_key"] = ""
 
 
 def run_checks(state: dict, force_checks: list[str]) -> None:
-    for name in ("yosemite", "prairie"):
+    for name in monitor_targets():
         monitor = state["monitors"][name]
         if not monitor.get("enabled") and name not in force_checks:
             print(f"{name} monitor is off")
@@ -590,7 +638,7 @@ def run_checks(state: dict, force_checks: list[str]) -> None:
             if name == "yosemite":
                 run_yosemite_check(monitor)
             else:
-                run_prairie_check(monitor)
+                run_reserve_ca_check(name, monitor)
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else "unknown"
             print(f"{name} monitor HTTP error: {status}")

@@ -9,6 +9,7 @@ It currently supports:
 
 - `yosemite` - Recreation.gov Yosemite campgrounds
 - `prairie` - Prairie Creek Redwoods SP Elk Prairie Campground on ReserveCalifornia
+- `gold` / `gold_bluffs` - Prairie Creek Redwoods SP Gold Bluffs Beach Camp on ReserveCalifornia
 
 ## GitHub Secrets
 
@@ -24,20 +25,24 @@ Do not commit these values to the repository.
 
 Send commands to your bot:
 
-- `/start all` - turn both monitors on and run checks
+- `/start all` - turn all monitors on and run checks
 - `/start yosemite` - turn Yosemite monitoring on
-- `/start prairie` - turn Prairie Creek monitoring on
-- `/stop all` - turn both monitors off
+- `/start prairie` - turn Elk Prairie monitoring on
+- `/start gold` - turn Gold Bluffs Beach monitoring on
+- `/stop all` - turn all monitors off
 - `/stop yosemite` - turn Yosemite monitoring off
-- `/stop prairie` - turn Prairie Creek monitoring off
+- `/stop prairie` - turn Elk Prairie monitoring off
+- `/stop gold` - turn Gold Bluffs Beach monitoring off
 - `/status` - show current settings
 - `/help` - show all commands with usage examples
 - `/commands` - same as `/help`
-- `/check all` - run one check for both monitors on the next workflow run
+- `/check all` - run one check for every monitor on the next workflow run
 - `/check yosemite` - run one Yosemite check
-- `/check prairie` - run one Prairie Creek check
+- `/check prairie` - run one Elk Prairie check
+- `/check gold` - run one Gold Bluffs Beach check
 - `/dates yosemite 2026-09-01 2026-09-03` - set Yosemite dates
 - `/dates prairie 2026-05-24 2026-05-26` - set Prairie Creek dates
+- `/dates gold 2026-05-23 2026-05-25` - set Gold Bluffs Beach dates
 - `/campgrounds yosemite all` - watch all configured Yosemite campgrounds
 - `/campgrounds yosemite list` - show all Yosemite campground options
 - `/campgrounds yosemite lower north upper` - choose specific Yosemite campgrounds
@@ -52,10 +57,11 @@ The Yosemite monitor watches these Recreation.gov campground IDs:
 - `232449` - North Pines Campground
 - `232447` - Upper Pines Campground
 
-The Prairie Creek monitor uses:
+The ReserveCalifornia monitors use:
 
 - California State Parks availability page id `415`
-- ReserveCalifornia park URL `https://reservecalifornia.com/park/696`
+- Elk Prairie ReserveCalifornia park URL `https://reservecalifornia.com/park/696`
+- Gold Bluffs Beach ReserveCalifornia park URL `https://reservecalifornia.com/park/697`
 
 ## Notes
 
