@@ -18,5 +18,6 @@
       "enabled": true,
       "last_alert_key": ""
     }
-  }
+  },
+  "scheduler": "external"
 }
