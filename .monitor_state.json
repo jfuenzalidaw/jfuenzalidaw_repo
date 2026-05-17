@@ -1,26 +1,43 @@
 {
   "last_update_id": 55343159,
   "monitors": {
-    "gold_bluffs": {
+    "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
       "checkout": "2026-05-25",
       "enabled": true,
       "last_alert_key": ""
     },
-    "prairie": {
+    "lower_yosemite": {
+      "checkin": "2026-05-22",
+      "checkout": "2026-05-26",
+      "enabled": true,
+      "last_alert_key": ""
+    },
+    "north_summit_lassen": {
+      "checkin": "2026-05-22",
+      "checkout": "2026-05-26",
+      "enabled": true,
+      "last_alert_key": ""
+    },
+    "north_yosemite": {
+      "checkin": "2026-05-22",
+      "checkout": "2026-05-26",
+      "enabled": true,
+      "last_alert_key": ""
+    },
+    "prairie_redwoods": {
       "checkin": "2026-05-24",
       "checkout": "2026-05-26",
       "enabled": true,
       "last_alert_key": ""
     },
-    "yosemite": {
-      "campgrounds": [
-        "232450",
-        "232449",
-        "232447",
-        "234041",
-        "234040"
-      ],
+    "south_summit_lassen": {
+      "checkin": "2026-05-22",
+      "checkout": "2026-05-26",
+      "enabled": true,
+      "last_alert_key": ""
+    },
+    "upper_yosemite": {
       "checkin": "2026-05-22",
       "checkout": "2026-05-26",
       "enabled": true,

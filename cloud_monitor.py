@@ -8,41 +8,45 @@ from pathlib import Path
 import requests
 
 
-YOSEMITE_CAMPGROUNDS = {
-    "232450": {"name": "Lower Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232450"},
-    "232449": {"name": "North Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232449"},
-    "232447": {"name": "Upper Pines Campground", "url": "https://www.recreation.gov/camping/campgrounds/232447"},
-    "234041": {"name": "Summit Lake North Campground", "url": "https://www.recreation.gov/camping/campgrounds/234041"},
-    "234040": {"name": "Summit Lake South Campground", "url": "https://www.recreation.gov/camping/campgrounds/234040"},
-}
-
-YOSEMITE_ALIASES = {
-    "lower": "232450",
-    "lowerpines": "232450",
-    "north": "232449",
-    "northpines": "232449",
-    "upper": "232447",
-    "upperpines": "232447",
-    "summit": "234041",
-    "summitnorth": "234041",
-    "summitlakenorth": "234041",
-    "northsummit": "234041",
-    "summitsouth": "234040",
-    "summitlakesouth": "234040",
-    "southsummit": "234040",
+RECREATION_GOV_MONITORS = {
+    "upper_yosemite": {
+        "name": "upper yosemite",
+        "facility_id": "232447",
+        "url": "https://www.recreation.gov/camping/campgrounds/232447",
+    },
+    "north_yosemite": {
+        "name": "north yosemite",
+        "facility_id": "232449",
+        "url": "https://www.recreation.gov/camping/campgrounds/232449",
+    },
+    "lower_yosemite": {
+        "name": "lower yosemite",
+        "facility_id": "232450",
+        "url": "https://www.recreation.gov/camping/campgrounds/232450",
+    },
+    "north_summit_lassen": {
+        "name": "north summit lassen",
+        "facility_id": "234041",
+        "url": "https://www.recreation.gov/camping/campgrounds/234041",
+    },
+    "south_summit_lassen": {
+        "name": "south summit lassen",
+        "facility_id": "234040",
+        "url": "https://www.recreation.gov/camping/campgrounds/234040",
+    },
 }
 
 RESERVE_CA_AVAILABILITY_URL = "https://www.parks.ca.gov/AvailabilityInfo"
 
 RESERVE_CA_MONITORS = {
-    "prairie": {
-        "name": "Prairie Creek Redwoods SP Elk Prairie Campground",
+    "prairie_redwoods": {
+        "name": "prairie redwoods",
         "parks_page_id": "415",
         "campground_anchor": "g-631",
         "reserve_url": "https://reservecalifornia.com/park/696",
     },
-    "gold_bluffs": {
-        "name": "Prairie Creek Redwoods SP Gold Bluffs Beach Camp",
+    "gold_bluffs_redwoods": {
+        "name": "gold bluffs redwoods",
         "parks_page_id": "415",
         "campground_anchor": "g-632",
         "reserve_url": "https://reservecalifornia.com/park/697",
@@ -50,13 +54,37 @@ RESERVE_CA_MONITORS = {
 }
 
 MONITOR_ALIASES = {
-    "yosemite": "yosemite",
-    "prairie": "prairie",
-    "elk": "prairie",
-    "elk_prairie": "prairie",
-    "gold": "gold_bluffs",
-    "gold_bluffs": "gold_bluffs",
-    "goldbluffs": "gold_bluffs",
+    "upper": "upper_yosemite",
+    "upper_yosemite": "upper_yosemite",
+    "upperyosemite": "upper_yosemite",
+    "upper_pines": "upper_yosemite",
+    "north": "north_yosemite",
+    "north_yosemite": "north_yosemite",
+    "northyosemite": "north_yosemite",
+    "north_pines": "north_yosemite",
+    "lower": "lower_yosemite",
+    "lower_yosemite": "lower_yosemite",
+    "loweryosemite": "lower_yosemite",
+    "lower_pines": "lower_yosemite",
+    "north_summit": "north_summit_lassen",
+    "north_summit_lassen": "north_summit_lassen",
+    "northsummitlassen": "north_summit_lassen",
+    "summit_north": "north_summit_lassen",
+    "summitnorth": "north_summit_lassen",
+    "south_summit": "south_summit_lassen",
+    "south_summit_lassen": "south_summit_lassen",
+    "southsummitlassen": "south_summit_lassen",
+    "summit_south": "south_summit_lassen",
+    "summitsouth": "south_summit_lassen",
+    "prairie": "prairie_redwoods",
+    "prairie_redwoods": "prairie_redwoods",
+    "prairieredwoods": "prairie_redwoods",
+    "elk": "prairie_redwoods",
+    "elk_prairie": "prairie_redwoods",
+    "gold": "gold_bluffs_redwoods",
+    "gold_bluffs": "gold_bluffs_redwoods",
+    "gold_bluffs_redwoods": "gold_bluffs_redwoods",
+    "goldbluffsredwoods": "gold_bluffs_redwoods",
 }
 
 AVAIL_API = "https://www.recreation.gov/api/camps/availability/campground/{id}/month"
@@ -66,24 +94,28 @@ STATE_PATH = Path(".monitor_state.json")
 
 def default_state() -> dict:
     today = dt.date.today()
+    recreation_dates = {
+        "enabled": False,
+        "checkin": (today + dt.timedelta(days=1)).isoformat(),
+        "checkout": (today + dt.timedelta(days=4)).isoformat(),
+        "last_alert_key": "",
+    }
     return {
         "last_update_id": 0,
         "scheduler": "external",
         "monitors": {
-            "yosemite": {
-                "enabled": False,
-                "checkin": (today + dt.timedelta(days=1)).isoformat(),
-                "checkout": (today + dt.timedelta(days=4)).isoformat(),
-                "campgrounds": list(YOSEMITE_CAMPGROUNDS.keys()),
-                "last_alert_key": "",
-            },
-            "prairie": {
+            "upper_yosemite": dict(recreation_dates),
+            "north_yosemite": dict(recreation_dates),
+            "lower_yosemite": dict(recreation_dates),
+            "north_summit_lassen": dict(recreation_dates),
+            "south_summit_lassen": dict(recreation_dates),
+            "prairie_redwoods": {
                 "enabled": True,
                 "checkin": "2026-05-24",
                 "checkout": "2026-05-26",
                 "last_alert_key": "",
             },
-            "gold_bluffs": {
+            "gold_bluffs_redwoods": {
                 "enabled": True,
                 "checkin": "2026-05-23",
                 "checkout": "2026-05-25",
@@ -93,10 +125,29 @@ def default_state() -> dict:
     }
 
 
-def sanitize_yosemite_monitor(monitor: dict) -> None:
-    supported = list(YOSEMITE_CAMPGROUNDS.keys())
-    selected = [cg_id for cg_id in monitor.get("campgrounds", []) if cg_id in YOSEMITE_CAMPGROUNDS]
-    monitor["campgrounds"] = selected or supported
+def recreation_monitor_by_facility_id(facility_id: str) -> str | None:
+    for name, config in RECREATION_GOV_MONITORS.items():
+        if config["facility_id"] == facility_id:
+            return name
+    return None
+
+
+def migrate_old_yosemite_group(state: dict, monitor: dict) -> None:
+    selected = set(monitor.get("campgrounds", []))
+    if not selected:
+        selected = {config["facility_id"] for config in RECREATION_GOV_MONITORS.values()}
+    for name, config in RECREATION_GOV_MONITORS.items():
+        state["monitors"][name].update({
+            "enabled": bool(monitor.get("enabled", False)) and config["facility_id"] in selected,
+            "checkin": monitor.get("checkin") or state["monitors"][name]["checkin"],
+            "checkout": monitor.get("checkout") or state["monitors"][name]["checkout"],
+            "last_alert_key": "",
+        })
+
+
+def migrate_old_reserve_ca_monitor(state: dict, old_name: str, new_name: str, monitors: dict) -> None:
+    if old_name in monitors:
+        state["monitors"][new_name].update(monitors[old_name])
 
 
 def migrate_state(raw: dict) -> dict:
@@ -104,23 +155,25 @@ def migrate_state(raw: dict) -> dict:
     if "monitors" in raw:
         state["last_update_id"] = raw.get("last_update_id", 0)
         state["scheduler"] = normalize_scheduler(raw.get("scheduler", "")) or state["scheduler"]
-        for name, monitor in raw.get("monitors", {}).items():
+        monitors = raw.get("monitors", {})
+        for name, monitor in monitors.items():
             if name in state["monitors"]:
                 state["monitors"][name].update(monitor)
-        sanitize_yosemite_monitor(state["monitors"]["yosemite"])
+        if "yosemite" in monitors:
+            migrate_old_yosemite_group(state, monitors["yosemite"])
+        migrate_old_reserve_ca_monitor(state, "prairie", "prairie_redwoods", monitors)
+        migrate_old_reserve_ca_monitor(state, "gold_bluffs", "gold_bluffs_redwoods", monitors)
         return state
 
     # Backward compatibility with the original single Yosemite monitor state.
     state["last_update_id"] = raw.get("last_update_id", 0)
     state["scheduler"] = normalize_scheduler(raw.get("scheduler", "")) or state["scheduler"]
-    state["monitors"]["yosemite"].update({
+    migrate_old_yosemite_group(state, {
         "enabled": raw.get("enabled", False),
-        "checkin": raw.get("checkin", state["monitors"]["yosemite"]["checkin"]),
-        "checkout": raw.get("checkout", state["monitors"]["yosemite"]["checkout"]),
-        "campgrounds": raw.get("campgrounds", list(YOSEMITE_CAMPGROUNDS.keys())),
-        "last_alert_key": raw.get("last_alert_key", ""),
+        "checkin": raw.get("checkin"),
+        "checkout": raw.get("checkout"),
+        "campgrounds": raw.get("campgrounds", [config["facility_id"] for config in RECREATION_GOV_MONITORS.values()]),
     })
-    sanitize_yosemite_monitor(state["monitors"]["yosemite"])
     return state
 
 
@@ -338,10 +391,10 @@ def check_reserve_ca(monitor_name: str, checkin: dt.date, checkout: dt.date) -> 
     }
 
 
-def yosemite_booking_url(cg_id: str, checkin: dt.date, checkout: dt.date) -> str:
+def recreation_booking_url(monitor_name: str, checkin: dt.date, checkout: dt.date) -> str:
     ci = checkin.strftime("%m%%2F%d%%2F%Y")
     co = checkout.strftime("%m%%2F%d%%2F%Y")
-    return f"{YOSEMITE_CAMPGROUNDS[cg_id]['url']}?checkin={ci}&checkout={co}"
+    return f"{RECREATION_GOV_MONITORS[monitor_name]['url']}?checkin={ci}&checkout={co}"
 
 
 def reserve_ca_booking_url(monitor_name: str, checkin: dt.date, checkout: dt.date) -> str:
@@ -367,32 +420,16 @@ def format_sites(sites: list[dict], limit: int = 8) -> str:
     return "\n".join(rows)
 
 
-def normalize_yosemite_campgrounds(text: str) -> list[str] | None:
-    raw = text.strip().lower()
-    if raw == "all":
-        return list(YOSEMITE_CAMPGROUNDS.keys())
-    selected = []
-    for part in raw.replace(",", " ").split():
-        key = part.replace("-", "").replace("_", "").replace(" ", "")
-        cg_id = part if part in YOSEMITE_CAMPGROUNDS else YOSEMITE_ALIASES.get(key)
-        if not cg_id:
-            return None
-        if cg_id not in selected:
-            selected.append(cg_id)
-    return selected
-
-
-def yosemite_campgrounds_text() -> str:
-    rows = []
-    for cg_id, campground in YOSEMITE_CAMPGROUNDS.items():
-        aliases = sorted(alias for alias, alias_id in YOSEMITE_ALIASES.items() if alias_id == cg_id)
-        alias_text = ", ".join(aliases)
-        rows.append(f"- {campground['name']} ({cg_id}) aliases: {alias_text}")
-    return "Yosemite campground options:\n" + "\n".join(rows)
-
-
 def monitor_targets() -> list[str]:
-    return ["yosemite", *RESERVE_CA_MONITORS.keys()]
+    return [*RECREATION_GOV_MONITORS.keys(), *RESERVE_CA_MONITORS.keys()]
+
+
+def monitors_text() -> str:
+    rows = []
+    for name in monitor_targets():
+        config = RECREATION_GOV_MONITORS.get(name, RESERVE_CA_MONITORS.get(name))
+        rows.append(f"- {config['name']}")
+    return "Available monitor names:\n" + "\n".join(rows)
 
 
 def normalize_monitor_target(value: str) -> str | None:
@@ -401,25 +438,25 @@ def normalize_monitor_target(value: str) -> str | None:
 
 
 def parse_target(rest: str, default: str = "all") -> tuple[list[str], str]:
+    words = rest.split()
     parts = rest.split(maxsplit=1)
     if not parts:
         return ([default] if default != "all" else monitor_targets()), ""
     first = parts[0].lower()
     if first in {"all", "both"}:
         return monitor_targets(), parts[1] if len(parts) > 1 else ""
-    target = normalize_monitor_target(first)
-    if target:
-        return [target], parts[1] if len(parts) > 1 else ""
+    for width in range(min(3, len(words)), 0, -1):
+        candidate = " ".join(words[:width])
+        target = normalize_monitor_target(candidate)
+        if target:
+            return [target], " ".join(words[width:])
     return ([default] if default != "all" else monitor_targets()), rest
 
 
 def monitor_status(name: str, monitor: dict) -> str:
     mode = "ON" if monitor["enabled"] else "OFF"
-    base = f"{name}: {mode}\nDates: {monitor['checkin']} to {monitor['checkout']}"
-    if name == "yosemite":
-        watched = "\n".join(f"- {YOSEMITE_CAMPGROUNDS[cg_id]['name']}" for cg_id in monitor["campgrounds"])
-        return f"{base}\nWatching:\n{watched}"
-    return f"{base}\nWatching:\n- {RESERVE_CA_MONITORS[name]['name']}"
+    label = RECREATION_GOV_MONITORS.get(name, RESERVE_CA_MONITORS.get(name))["name"]
+    return f"{label}: {mode}\nDates: {monitor['checkin']} to {monitor['checkout']}"
 
 
 def status_text(state: dict) -> str:
@@ -439,28 +476,24 @@ def help_text(state: dict) -> str:
         "- /status - show active scheduler, dates, and watched campgrounds\n"
         "- /help - show this command guide\n\n"
         "Turn monitors on/off\n"
-        "- /start all - turn on Yosemite, Elk Prairie, and Gold Bluffs\n"
-        "- /start yosemite - turn on Yosemite only\n"
-        "- /start prairie - turn on Elk Prairie only\n"
-        "- /start gold - turn on Gold Bluffs Beach only\n"
+        "- /start all - turn on every campsite\n"
+        "- /start upper yosemite\n"
+        "- /start north yosemite\n"
+        "- /start lower yosemite\n"
+        "- /start north summit lassen\n"
+        "- /start south summit lassen\n"
+        "- /start prairie redwoods\n"
+        "- /start gold bluffs redwoods\n"
         "- /stop all - turn off all monitors\n"
-        "- /stop yosemite - turn off Yosemite only\n"
-        "- /stop prairie - turn off Elk Prairie only\n"
-        "- /stop gold - turn off Gold Bluffs Beach only\n\n"
+        "- /stop upper yosemite - turn off one campsite\n\n"
         "Run a check\n"
         "- /check all - check every monitor on the next workflow run\n"
-        "- /check yosemite - check Yosemite once\n"
-        "- /check prairie - check Elk Prairie once\n"
-        "- /check gold - check Gold Bluffs Beach once\n\n"
+        "- /check upper yosemite - check one campsite once\n"
+        "- /monitors - list every campsite name\n\n"
         "Change dates\n"
-        "- /dates yosemite 2026-09-01 2026-09-03\n"
-        "- /dates prairie 2026-05-24 2026-05-26\n"
-        "- /dates gold 2026-05-23 2026-05-25\n"
+        "- /dates upper yosemite 2026-05-22 2026-05-26\n"
+        "- /dates prairie redwoods 2026-05-24 2026-05-26\n"
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n\n"
-        "Yosemite campgrounds\n"
-        "- /campgrounds yosemite list - list supported campground names and aliases\n"
-        "- /campgrounds yosemite all - watch all supported Recreation.gov campgrounds\n"
-        "- /campgrounds yosemite lower north upper summitnorth summitsouth - choose specific campgrounds\n\n"
         "Scheduler\n"
         "- /scheduler external - use cron-job.org dispatch trigger\n"
         "- /scheduler github - use GitHub Actions 5-minute schedule\n"
@@ -505,6 +538,8 @@ def process_commands(state: dict) -> list[str]:
             targets, _ = parse_target(rest)
             force_checks.update(targets)
             send_telegram("Running availability check for: " + ", ".join(targets))
+        elif command in {"/monitors", "/list"}:
+            send_telegram(monitors_text())
         elif command in {"/scheduler", "/schedule"}:
             scheduler = normalize_scheduler(rest)
             if not scheduler:
@@ -532,9 +567,9 @@ def process_commands(state: dict) -> list[str]:
             if not ok:
                 continue
         elif command == "/dates":
-            targets, date_args = parse_target(rest, default="yosemite")
+            targets, date_args = parse_target(rest)
             if len(targets) != 1:
-                send_telegram("Usage: /dates yosemite|prairie|gold YYYY-MM-DD YYYY-MM-DD")
+                send_telegram("Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
                 continue
             try:
                 ci_s, co_s = date_args.split()[:2]
@@ -549,75 +584,33 @@ def process_commands(state: dict) -> list[str]:
                 force_checks.add(targets[0])
                 send_telegram(f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
             except Exception:
-                send_telegram("Usage: /dates yosemite|prairie|gold YYYY-MM-DD YYYY-MM-DD")
+                send_telegram("Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
         elif command == "/campgrounds":
-            targets, cg_args = parse_target(rest, default="yosemite")
-            if targets != ["yosemite"]:
-                send_telegram("Campground selection is only supported for Yosemite.")
-                continue
-            if cg_args.strip().lower() == "list":
-                send_telegram(yosemite_campgrounds_text())
-                continue
-            selected = normalize_yosemite_campgrounds(cg_args)
-            if not selected:
-                send_telegram(
-                    "Usage: /campgrounds yosemite list OR /campgrounds yosemite all OR "
-                    "/campgrounds yosemite lower north upper summitnorth summitsouth"
-                )
-            else:
-                state["monitors"]["yosemite"]["campgrounds"] = selected
-                state["monitors"]["yosemite"]["last_alert_key"] = ""
-                force_checks.add("yosemite")
-                send_telegram("Yosemite campgrounds updated.\n\n" + status_text(state))
+            send_telegram("Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
         else:
             send_telegram("Unknown command.\n\n" + status_text(state))
     return sorted(force_checks)
 
 
-def run_yosemite_check(monitor: dict) -> None:
+def run_recreation_gov_check(name: str, monitor: dict) -> None:
+    config = RECREATION_GOV_MONITORS[name]
     checkin = dt.date.fromisoformat(monitor["checkin"])
     checkout = dt.date.fromisoformat(monitor["checkout"])
-    available_map = {}
-    errors = []
-    for cg_id in monitor["campgrounds"]:
-        try:
-            sites = check_yosemite_campground(cg_id, checkin, checkout)
-            print(f"{YOSEMITE_CAMPGROUNDS[cg_id]['name']}: {len(sites)} available")
-            if sites:
-                available_map[cg_id] = sites
-        except requests.HTTPError as exc:
-            status = exc.response.status_code if exc.response is not None else "unknown"
-            msg = f"{YOSEMITE_CAMPGROUNDS[cg_id]['name']}: HTTP {status}"
-            print(msg)
-            errors.append(msg)
-        except Exception as exc:
-            msg = f"{YOSEMITE_CAMPGROUNDS[cg_id]['name']}: {exc}"
-            print(msg)
-            errors.append(msg)
-        time.sleep(1.5)
+    sites = check_yosemite_campground(config["facility_id"], checkin, checkout)
+    print(f"{config['name']}: {len(sites)} available")
 
-    alert_key = "|".join(
-        f"{cg_id}:{','.join(site['campsite_id'] for site in sites[:20])}"
-        for cg_id, sites in sorted(available_map.items())
-    )
-    if available_map and alert_key != monitor.get("last_alert_key", ""):
-        blocks = []
-        for cg_id, sites in available_map.items():
-            blocks.append(
-                f"<a href='{yosemite_booking_url(cg_id, checkin, checkout)}'>{YOSEMITE_CAMPGROUNDS[cg_id]['name']}</a>\n"
-                f"{format_sites(sites)}"
-            )
+    alert_key = ",".join(site["campsite_id"] for site in sites[:20])
+    if sites and alert_key != monitor.get("last_alert_key", ""):
         send_telegram(
-            f"Yosemite Campsite Available!\n\n"
+            f"Recreation.gov campsite available!\n\n"
+            f"<a href='{recreation_booking_url(name, checkin, checkout)}'>{config['name']}</a>\n"
             f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}\n\n"
-            f"Available:\n\n" + "\n\n".join(blocks) + "\n\nBook now!"
+            f"{format_sites(sites)}\n\nBook now!"
         )
         monitor["last_alert_key"] = alert_key
-    elif not available_map and monitor.get("last_alert_key"):
-        send_telegram("Previously found Yosemite spots are gone. Keeping watch.")
+    elif not sites and monitor.get("last_alert_key"):
+        send_telegram(f"Previously found {config['name']} spots are gone. Keeping watch.")
         monitor["last_alert_key"] = ""
-    elif errors:
-        print("Yosemite completed with non-fatal errors: " + "; ".join(errors))
 
 
 def run_reserve_ca_check(name: str, monitor: dict) -> None:
@@ -647,8 +640,8 @@ def run_checks(state: dict, force_checks: list[str]) -> None:
             print(f"{name} monitor is off")
             continue
         try:
-            if name == "yosemite":
-                run_yosemite_check(monitor)
+            if name in RECREATION_GOV_MONITORS:
+                run_recreation_gov_check(name, monitor)
             else:
                 run_reserve_ca_check(name, monitor)
         except requests.HTTPError as exc:
