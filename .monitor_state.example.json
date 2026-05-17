@@ -1,5 +1,6 @@
 {
   "last_update_id": 0,
+  "scheduler": "external",
   "monitors": {
     "prairie": {
       "checkin": "2026-05-24",

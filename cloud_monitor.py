@@ -38,6 +38,7 @@ def default_state() -> dict:
     today = dt.date.today()
     return {
         "last_update_id": 0,
+        "scheduler": "external",
         "monitors": {
             "yosemite": {
                 "enabled": False,
@@ -66,6 +67,7 @@ def migrate_state(raw: dict) -> dict:
     state = default_state()
     if "monitors" in raw:
         state["last_update_id"] = raw.get("last_update_id", 0)
+        state["scheduler"] = normalize_scheduler(raw.get("scheduler", "")) or state["scheduler"]
         for name, monitor in raw.get("monitors", {}).items():
             if name in state["monitors"]:
                 state["monitors"][name].update(monitor)
@@ -74,6 +76,7 @@ def migrate_state(raw: dict) -> dict:
 
     # Backward compatibility with the original single Yosemite monitor state.
     state["last_update_id"] = raw.get("last_update_id", 0)
+    state["scheduler"] = normalize_scheduler(raw.get("scheduler", "")) or state["scheduler"]
     state["monitors"]["yosemite"].update({
         "enabled": raw.get("enabled", False),
         "checkin": raw.get("checkin", state["monitors"]["yosemite"]["checkin"]),
@@ -83,6 +86,37 @@ def migrate_state(raw: dict) -> dict:
     })
     sanitize_yosemite_monitor(state["monitors"]["yosemite"])
     return state
+
+
+def normalize_scheduler(value: str) -> str | None:
+    key = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    if key in {"external", "cron", "cronjob", "cron_job", "cronjoborg", "cron_job_org"}:
+        return "external"
+    if key in {"github", "github_actions", "actions", "schedule", "scheduled"}:
+        return "github"
+    return None
+
+
+def scheduler_label(value: str) -> str:
+    if value == "github":
+        return "GitHub Actions schedule (every 5 minutes)"
+    return "External cron-job.org dispatch (currently every 2 minutes)"
+
+
+def trigger_source() -> str:
+    event_name = os.getenv("GITHUB_EVENT_NAME", "").strip()
+    if event_name == "schedule":
+        return "github"
+    if event_name == "repository_dispatch":
+        return "external"
+    return "manual"
+
+
+def should_run_for_scheduler(state: dict) -> bool:
+    source = trigger_source()
+    if source == "manual":
+        return True
+    return source == state.get("scheduler", "external")
 
 
 def load_state() -> dict:
@@ -290,6 +324,7 @@ def status_text(state: dict) -> str:
     blocks = [monitor_status(name, state["monitors"][name]) for name in ("yosemite", "prairie")]
     return (
         "Campsite monitors\n\n"
+        + f"Scheduler: {scheduler_label(state.get('scheduler', 'external'))}\n\n"
         + "\n\n".join(blocks)
         + "\n\nCommands:\n"
           "/start [all|yosemite|prairie]\n"
@@ -297,7 +332,9 @@ def status_text(state: dict) -> str:
           "/status\n"
           "/check [all|yosemite|prairie]\n"
           "/dates [yosemite|prairie] YYYY-MM-DD YYYY-MM-DD\n"
-          "/campgrounds yosemite all|list|lower|north|upper"
+          "/campgrounds yosemite all|list|lower|north|upper\n"
+          "/scheduler external|github\n"
+          "/settings scheduler external|github"
     )
 
 
@@ -334,6 +371,28 @@ def process_commands(state: dict) -> list[str]:
             targets, _ = parse_target(rest)
             force_checks.update(targets)
             send_telegram("Running availability check for: " + ", ".join(targets))
+        elif command in {"/scheduler", "/schedule"}:
+            scheduler = normalize_scheduler(rest)
+            if not scheduler:
+                send_telegram(
+                    "Current scheduler: "
+                    + scheduler_label(state.get("scheduler", "external"))
+                    + "\n\nUsage: /scheduler external OR /scheduler github"
+                )
+                continue
+            state["scheduler"] = scheduler
+            send_telegram("Scheduler updated: " + scheduler_label(scheduler))
+        elif command == "/settings":
+            setting, _, value = rest.strip().partition(" ")
+            if setting.lower() != "scheduler":
+                send_telegram("Usage: /settings scheduler external OR /settings scheduler github")
+                continue
+            scheduler = normalize_scheduler(value)
+            if not scheduler:
+                send_telegram("Usage: /settings scheduler external OR /settings scheduler github")
+                continue
+            state["scheduler"] = scheduler
+            send_telegram("Scheduler updated: " + scheduler_label(scheduler))
         elif command == "/dates":
             targets, date_args = parse_target(rest, default="yosemite")
             if len(targets) != 1:
@@ -459,6 +518,14 @@ def run_checks(state: dict, force_checks: list[str]) -> None:
 
 def main():
     state = load_state()
+    if not should_run_for_scheduler(state):
+        print(
+            "Skipping "
+            f"{trigger_source()} trigger because scheduler is set to "
+            f"{state.get('scheduler', 'external')}"
+        )
+        save_state(state)
+        return
     force_checks = process_commands(state)
     run_checks(state, force_checks)
     save_state(state)

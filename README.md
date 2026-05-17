@@ -38,6 +38,10 @@ Send commands to your bot:
 - `/campgrounds yosemite all` - watch all configured Yosemite campgrounds
 - `/campgrounds yosemite list` - show all Yosemite campground options
 - `/campgrounds yosemite lower north upper` - choose specific Yosemite campgrounds
+- `/scheduler external` - use cron-job.org repository dispatch trigger
+- `/scheduler github` - use GitHub Actions' free 5-minute schedule
+- `/settings scheduler external` - same as `/scheduler external`
+- `/settings scheduler github` - same as `/scheduler github`
 
 The Yosemite monitor watches these Recreation.gov campground IDs:
 
@@ -55,9 +59,10 @@ The Prairie Creek monitor uses:
 GitHub Actions scheduled workflows can run as often as every 5 minutes, but
 GitHub may delay scheduled jobs during busy periods. This repo also supports a
 `repository_dispatch` trigger so cron-job.org can run it on a reliable external
-schedule. This monitor uses public availability pages/APIs and the Telegram Bot
-API. It does not log in to booking sites, open a browser, or add campsites to a
-cart.
+schedule. Use `/scheduler external` or `/scheduler github` in Telegram to choose
+which trigger should perform real checks. This monitor uses public availability
+pages/APIs and the Telegram Bot API. It does not log in to booking sites, open a
+browser, or add campsites to a cart.
 
 ## Reliable External Trigger
 
