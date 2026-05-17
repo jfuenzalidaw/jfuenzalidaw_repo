@@ -31,6 +31,8 @@ Send commands to your bot:
 - `/stop yosemite` - turn Yosemite monitoring off
 - `/stop prairie` - turn Prairie Creek monitoring off
 - `/status` - show current settings
+- `/help` - show all commands with usage examples
+- `/commands` - same as `/help`
 - `/check all` - run one check for both monitors on the next workflow run
 - `/check yosemite` - run one Yosemite check
 - `/check prairie` - run one Prairie Creek check

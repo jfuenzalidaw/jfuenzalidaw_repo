@@ -376,15 +376,41 @@ def status_text(state: dict) -> str:
         "Campsite monitors\n\n"
         + f"Scheduler: {scheduler_label(state.get('scheduler', 'external'))}\n\n"
         + "\n\n".join(blocks)
-        + "\n\nCommands:\n"
-          "/start [all|yosemite|prairie]\n"
-          "/stop [all|yosemite|prairie]\n"
-          "/status\n"
-          "/check [all|yosemite|prairie]\n"
-          "/dates [yosemite|prairie] YYYY-MM-DD YYYY-MM-DD\n"
-          "/campgrounds yosemite all|list|lower|north|upper\n"
-          "/scheduler external|github\n"
-          "/settings scheduler external|github"
+        + "\n\nUse /help for all commands."
+    )
+
+
+def help_text(state: dict) -> str:
+    return (
+        "Campsite monitor commands\n\n"
+        "Status\n"
+        "- /status - show active scheduler, dates, and watched campgrounds\n"
+        "- /help - show this command guide\n\n"
+        "Turn monitors on/off\n"
+        "- /start all - turn on Yosemite and Prairie Creek\n"
+        "- /start yosemite - turn on Yosemite only\n"
+        "- /start prairie - turn on Prairie Creek only\n"
+        "- /stop all - turn off both monitors\n"
+        "- /stop yosemite - turn off Yosemite only\n"
+        "- /stop prairie - turn off Prairie Creek only\n\n"
+        "Run a check\n"
+        "- /check all - check both monitors on the next workflow run\n"
+        "- /check yosemite - check Yosemite once\n"
+        "- /check prairie - check Prairie Creek once\n\n"
+        "Change dates\n"
+        "- /dates yosemite 2026-09-01 2026-09-03\n"
+        "- /dates prairie 2026-05-24 2026-05-26\n"
+        "Dates use YYYY-MM-DD. Checkout must be after checkin.\n\n"
+        "Yosemite campgrounds\n"
+        "- /campgrounds yosemite list - list supported campground names and aliases\n"
+        "- /campgrounds yosemite all - watch all supported Yosemite campgrounds\n"
+        "- /campgrounds yosemite lower north upper - choose specific campgrounds\n\n"
+        "Scheduler\n"
+        "- /scheduler external - use cron-job.org dispatch trigger\n"
+        "- /scheduler github - use GitHub Actions 5-minute schedule\n"
+        "- /settings scheduler external - same as /scheduler external\n"
+        "- /settings scheduler github - same as /scheduler github\n\n"
+        f"Current scheduler: {scheduler_label(state.get('scheduler', 'external'))}"
     )
 
 
@@ -404,7 +430,9 @@ def process_commands(state: dict) -> list[str]:
         command, _, rest = text.partition(" ")
         command = command.lower().split("@", 1)[0]
 
-        if command in {"/help", "/status"}:
+        if command in {"/help", "/commands"}:
+            send_telegram(help_text(state))
+        elif command == "/status":
             send_telegram(status_text(state))
         elif command in {"/start", "/on", "/start_monitor"}:
             targets, _ = parse_target(rest)
