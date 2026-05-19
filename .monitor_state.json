@@ -1,5 +1,5 @@
 {
-  "last_update_id": 55343173,
+  "last_update_id": 55343175,
   "monitors": {
     "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
@@ -26,9 +26,9 @@
       "last_alert_key": ""
     },
     "prairie_redwoods": {
-      "checkin": "2026-05-24",
-      "checkout": "2026-05-26",
-      "enabled": false,
+      "checkin": "2026-05-23",
+      "checkout": "2026-05-25",
+      "enabled": true,
       "last_alert_key": ""
     },
     "south_summit_lassen": {
