@@ -1,5 +1,5 @@
 {
-  "last_update_id": 55343177,
+  "last_update_id": 55343178,
   "monitors": {
     "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
@@ -26,8 +26,8 @@
       "last_alert_key": ""
     },
     "prairie_redwoods": {
-      "checkin": "2026-11-25",
-      "checkout": "2026-11-27",
+      "checkin": "2026-11-15",
+      "checkout": "2026-11-17",
       "enabled": true,
       "last_alert_key": ""
     },
