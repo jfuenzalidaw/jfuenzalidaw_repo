@@ -1,10 +1,10 @@
 {
-  "last_update_id": 55343187,
+  "last_update_id": 55343189,
   "monitors": {
     "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
-      "checkout": "2026-05-25",
-      "enabled": false,
+      "checkout": "2026-05-26",
+      "enabled": true,
       "last_alert_key": ""
     },
     "lower_yosemite": {
