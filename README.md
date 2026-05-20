@@ -3,8 +3,10 @@
 Headless campsite availability monitor for GitHub Actions.
 
 The workflow checks Telegram commands and sends Telegram alerts when matching
-campsites are available. Each campsite is managed as its own monitor. The
-workflow is triggered by cron-job.org using GitHub `repository_dispatch`.
+campsites are available. Each campsite is managed as its own monitor. Date
+ranges are checked one night at a time, so a range alerts when at least one
+one-night stay inside that range is available. The workflow is triggered by
+cron-job.org using GitHub `repository_dispatch`.
 
 ## Monitor Names
 
@@ -49,6 +51,10 @@ Send commands to your bot:
 - `/check all` - run one check for every campsite on the next workflow run
 - `/check upper yosemite` - run one campsite check
 - `/dates upper yosemite 2026-05-22 2026-05-26` - set dates for one campsite
+
+Date ranges are scanned as one-night stays. For example,
+`/dates upper yosemite 2026-05-22 2026-05-26` checks May 22-23, May 23-24,
+May 24-25, and May 25-26 independently.
 
 Old campground grouping commands such as `/campgrounds yosemite ...` are no
 longer used. Use the individual monitor names above instead.

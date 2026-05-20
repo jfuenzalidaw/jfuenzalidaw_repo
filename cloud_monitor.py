@@ -237,13 +237,16 @@ def month_starts_between(start: dt.date, end_exclusive: dt.date):
             cursor = dt.date(cursor.year, cursor.month + 1, 1)
 
 
-def check_yosemite_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -> list[dict]:
-    nights = []
+def date_windows(checkin: dt.date, checkout: dt.date) -> list[tuple[dt.date, dt.date]]:
+    windows = []
     day = checkin
     while day < checkout:
-        nights.append(day.strftime("%Y-%m-%dT00:00:00Z"))
+        windows.append((day, day + dt.timedelta(days=1)))
         day += dt.timedelta(days=1)
+    return windows
 
+
+def fetch_recreation_gov_campsites(cg_id: str, checkin: dt.date, checkout: dt.date) -> dict[str, dict]:
     campsites: dict[str, dict] = {}
     url = AVAIL_API.format(id=cg_id)
     for month_start in month_starts_between(checkin, checkout):
@@ -261,10 +264,14 @@ def check_yosemite_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -
             merged["loop"] = merged.get("loop") or site.get("loop", "")
             merged["site"] = merged.get("site") or site.get("site", "")
             merged["type"] = merged.get("type") or site.get("campsite_type", "STANDARD NONELECTRIC")
+    return campsites
 
+
+def available_recreation_sites_for_night(campsites: dict[str, dict], night: dt.date) -> list[dict]:
+    night_key = night.strftime("%Y-%m-%dT00:00:00Z")
     available = []
     for site_id, site in campsites.items():
-        if all(site.get("availabilities", {}).get(n) == "Available" for n in nights):
+        if site.get("availabilities", {}).get(night_key) == "Available":
             available.append({
                 "campsite_id": site_id,
                 "loop": site.get("loop", ""),
@@ -272,6 +279,20 @@ def check_yosemite_campground(cg_id: str, checkin: dt.date, checkout: dt.date) -
                 "type": site.get("type", "STANDARD NONELECTRIC"),
             })
     return available
+
+
+def check_recreation_gov_nights(cg_id: str, checkin: dt.date, checkout: dt.date) -> list[dict]:
+    campsites = fetch_recreation_gov_campsites(cg_id, checkin, checkout)
+    available_nights = []
+    for start, end in date_windows(checkin, checkout):
+        sites = available_recreation_sites_for_night(campsites, start)
+        if sites:
+            available_nights.append({
+                "checkin": start,
+                "checkout": end,
+                "sites": sites,
+            })
+    return available_nights
 
 
 def check_reserve_ca(monitor_name: str, checkin: dt.date, checkout: dt.date) -> dict:
@@ -307,6 +328,19 @@ def check_reserve_ca(monitor_name: str, checkin: dt.date, checkout: dt.date) -> 
     }
 
 
+def check_reserve_ca_nights(monitor_name: str, checkin: dt.date, checkout: dt.date) -> list[dict]:
+    available_nights = []
+    for start, end in date_windows(checkin, checkout):
+        result = check_reserve_ca(monitor_name, start, end)
+        if result["available"]:
+            available_nights.append({
+                "checkin": start,
+                "checkout": end,
+                "url": result["url"],
+            })
+    return available_nights
+
+
 def recreation_booking_url(monitor_name: str, checkin: dt.date, checkout: dt.date) -> str:
     ci = checkin.strftime("%m%%2F%d%%2F%Y")
     co = checkout.strftime("%m%%2F%d%%2F%Y")
@@ -333,6 +367,36 @@ def format_sites(sites: list[dict], limit: int = 8) -> str:
         rows.append(label)
     if len(sites) > limit:
         rows.append(f"- plus {len(sites) - limit} more")
+    return "\n".join(rows)
+
+
+def format_date_window(checkin: dt.date, checkout: dt.date) -> str:
+    if checkin.year == checkout.year:
+        return f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}"
+    return f"{checkin.strftime('%b %d, %Y')} - {checkout.strftime('%b %d, %Y')}"
+
+
+def format_recreation_nights(monitor_name: str, nights: list[dict], limit: int = 4) -> str:
+    rows = []
+    for night in nights[:limit]:
+        link = recreation_booking_url(monitor_name, night["checkin"], night["checkout"])
+        rows.append(
+            f"<a href='{link}'>{format_date_window(night['checkin'], night['checkout'])}</a>\n"
+            f"{format_sites(night['sites'], limit=5)}"
+        )
+    if len(nights) > limit:
+        rows.append(f"Plus {len(nights) - limit} more available night(s).")
+    return "\n\n".join(rows)
+
+
+def format_reserve_ca_nights(nights: list[dict], limit: int = 8) -> str:
+    rows = []
+    for night in nights[:limit]:
+        rows.append(
+            f"- <a href='{night['url']}'>{format_date_window(night['checkin'], night['checkout'])}</a>"
+        )
+    if len(nights) > limit:
+        rows.append(f"- plus {len(nights) - limit} more available night(s)")
     return "\n".join(rows)
 
 
@@ -409,7 +473,8 @@ def help_text(state: dict) -> str:
         "Change dates\n"
         "- /dates upper yosemite 2026-05-22 2026-05-26\n"
         "- /dates prairie redwoods 2026-05-24 2026-05-26\n"
-        "Dates use YYYY-MM-DD. Checkout must be after checkin."
+        "Dates use YYYY-MM-DD. Checkout must be after checkin.\n"
+        "The range is checked one night at a time, so any available night will alert."
     )
 
 
@@ -482,19 +547,23 @@ def run_recreation_gov_check(name: str, monitor: dict) -> None:
     config = RECREATION_GOV_MONITORS[name]
     checkin = dt.date.fromisoformat(monitor["checkin"])
     checkout = dt.date.fromisoformat(monitor["checkout"])
-    sites = check_yosemite_campground(config["facility_id"], checkin, checkout)
-    print(f"{config['name']}: {len(sites)} available")
+    available_nights = check_recreation_gov_nights(config["facility_id"], checkin, checkout)
+    print(f"{config['name']}: {len(available_nights)} available night(s)")
 
-    alert_key = ",".join(site["campsite_id"] for site in sites[:20])
-    if sites and alert_key != monitor.get("last_alert_key", ""):
+    alert_parts = []
+    for night in available_nights:
+        site_ids = ",".join(site["campsite_id"] for site in night["sites"][:20])
+        alert_parts.append(f"{night['checkin'].isoformat()}:{site_ids}")
+    alert_key = "|".join(alert_parts)
+    if available_nights and alert_key != monitor.get("last_alert_key", ""):
         send_telegram(
             f"Recreation.gov campsite available!\n\n"
-            f"<a href='{recreation_booking_url(name, checkin, checkout)}'>{config['name']}</a>\n"
-            f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}\n\n"
-            f"{format_sites(sites)}\n\nBook now!"
+            f"{config['name']}\n"
+            f"Selected range: {format_date_window(checkin, checkout)}\n\n"
+            f"{format_recreation_nights(name, available_nights)}\n\nBook now!"
         )
         monitor["last_alert_key"] = alert_key
-    elif not sites and monitor.get("last_alert_key"):
+    elif not available_nights and monitor.get("last_alert_key"):
         send_telegram(f"Previously found {config['name']} spots are gone. Keeping watch.")
         monitor["last_alert_key"] = ""
 
@@ -503,18 +572,18 @@ def run_reserve_ca_check(name: str, monitor: dict) -> None:
     config = RESERVE_CA_MONITORS[name]
     checkin = dt.date.fromisoformat(monitor["checkin"])
     checkout = dt.date.fromisoformat(monitor["checkout"])
-    result = check_reserve_ca(name, checkin, checkout)
-    print(f"{config['name']}: {result['label']}")
-    alert_key = f"{name}:{monitor['checkin']}:{monitor['checkout']}:{result['available']}"
-    if result["available"] and alert_key != monitor.get("last_alert_key", ""):
+    available_nights = check_reserve_ca_nights(name, checkin, checkout)
+    print(f"{config['name']}: {len(available_nights)} available night(s)")
+    alert_key = "|".join(night["checkin"].isoformat() for night in available_nights)
+    if available_nights and alert_key != monitor.get("last_alert_key", ""):
         send_telegram(
             f"ReserveCalifornia campsite available!\n\n"
             f"{config['name']}\n"
-            f"{checkin.strftime('%b %d')} - {checkout.strftime('%b %d, %Y')}\n\n"
-            f"<a href='{result['url']}'>Open ReserveCalifornia</a>"
+            f"Selected range: {format_date_window(checkin, checkout)}\n\n"
+            f"{format_reserve_ca_nights(available_nights)}"
         )
         monitor["last_alert_key"] = alert_key
-    elif not result["available"] and monitor.get("last_alert_key"):
+    elif not available_nights and monitor.get("last_alert_key"):
         send_telegram(f"Previously found {config['name']} spot is gone. Keeping watch.")
         monitor["last_alert_key"] = ""
 
