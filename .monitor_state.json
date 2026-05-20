@@ -1,10 +1,10 @@
 {
-  "last_update_id": 55343180,
+  "last_update_id": 55343181,
   "monitors": {
     "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
       "checkout": "2026-05-25",
-      "enabled": true,
+      "enabled": false,
       "last_alert_key": ""
     },
     "lower_yosemite": {
@@ -16,7 +16,7 @@
     "north_summit_lassen": {
       "checkin": "2026-05-30",
       "checkout": "2026-05-31",
-      "enabled": true,
+      "enabled": false,
       "last_alert_key": ""
     },
     "north_yosemite": {
@@ -34,7 +34,7 @@
     "south_summit_lassen": {
       "checkin": "2026-05-30",
       "checkout": "2026-05-31",
-      "enabled": true,
+      "enabled": false,
       "last_alert_key": ""
     },
     "upper_yosemite": {
