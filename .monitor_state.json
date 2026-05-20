@@ -1,5 +1,5 @@
 {
-  "last_update_id": 55343181,
+  "last_update_id": 55343184,
   "monitors": {
     "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
@@ -10,7 +10,7 @@
     "lower_yosemite": {
       "checkin": "2026-05-22",
       "checkout": "2026-05-26",
-      "enabled": false,
+      "enabled": true,
       "last_alert_key": ""
     },
     "north_summit_lassen": {
@@ -22,7 +22,7 @@
     "north_yosemite": {
       "checkin": "2026-05-22",
       "checkout": "2026-05-26",
-      "enabled": false,
+      "enabled": true,
       "last_alert_key": ""
     },
     "prairie_redwoods": {
@@ -40,7 +40,7 @@
     "upper_yosemite": {
       "checkin": "2026-05-22",
       "checkout": "2026-05-26",
-      "enabled": false,
+      "enabled": true,
       "last_alert_key": ""
     }
   }
