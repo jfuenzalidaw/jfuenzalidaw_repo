@@ -8,3 +8,4 @@ yosemite_debug/
 # Python cache and local state.
 __pycache__/
 *.py[cod]
+.venv/

@@ -14,20 +14,12 @@ the workflow. Each active run checks every 15 seconds while it is active.
 - `upper_yosemite`
 - `north_yosemite`
 - `lower_yosemite`
-- `north_summit_lassen`
-- `south_summit_lassen`
-- `prairie_redwoods`
-- `gold_bluffs_redwoods`
 
 Telegram commands also accept the same names with spaces:
 
 - `upper yosemite`
 - `north yosemite`
 - `lower yosemite`
-- `north summit lassen`
-- `south summit lassen`
-- `prairie redwoods`
-- `gold bluffs redwoods`
 
 ## GitHub Secrets
 
@@ -51,11 +43,11 @@ Send commands to your bot:
 - `/status` - show current settings
 - `/help` - show all commands with usage examples
 - `/commands` - same as `/help`
-- `/monitors` - list all campsite monitor names
-- `/start all` - turn every campsite on and run checks
+- `/monitors` - list available Yosemite campsite monitor names
+- `/start all` - turn every Yosemite campsite on and run checks
 - `/start upper yosemite` - turn one campsite on
 - `/stop upper yosemite` - turn one campsite off
-- `/check all` - run one check for every campsite on the next workflow run
+- `/check all` - run one check for every Yosemite campsite on the next workflow run
 - `/check upper yosemite` - run one campsite check
 - `/dates upper yosemite 2026-05-22 2026-05-26` - set dates for one campsite
 
@@ -73,13 +65,6 @@ Recreation.gov:
 - `upper_yosemite` - `232447` - Upper Pines Campground
 - `north_yosemite` - `232449` - North Pines Campground
 - `lower_yosemite` - `232450` - Lower Pines Campground
-- `north_summit_lassen` - `234041` - Summit Lake North Campground
-- `south_summit_lassen` - `234040` - Summit Lake South Campground
-
-ReserveCalifornia:
-
-- `prairie_redwoods` - `https://reservecalifornia.com/park/696`
-- `gold_bluffs_redwoods` - `https://reservecalifornia.com/park/697`
 
 ## Trigger
 

@@ -53,6 +53,12 @@ RESERVE_CA_MONITORS = {
     },
 }
 
+ACTIVE_MONITORS = (
+    "upper_yosemite",
+    "north_yosemite",
+    "lower_yosemite",
+)
+
 MONITOR_ALIASES = {
     "upper": "upper_yosemite",
     "upper_yosemite": "upper_yosemite",
@@ -401,7 +407,7 @@ def format_reserve_ca_nights(nights: list[dict], limit: int = 8) -> str:
 
 
 def monitor_targets() -> list[str]:
-    return [*RECREATION_GOV_MONITORS.keys(), *RESERVE_CA_MONITORS.keys()]
+    return list(ACTIVE_MONITORS)
 
 
 def monitors_text() -> str:
@@ -409,7 +415,7 @@ def monitors_text() -> str:
     for name in monitor_targets():
         config = RECREATION_GOV_MONITORS.get(name, RESERVE_CA_MONITORS.get(name))
         rows.append(f"- {config['name']}")
-    return "Available monitor names:\n" + "\n".join(rows)
+    return "Available Yosemite monitor names:\n" + "\n".join(rows)
 
 
 def normalize_monitor_target(value: str) -> str | None:
@@ -428,9 +434,9 @@ def parse_target(rest: str, default: str = "all") -> tuple[list[str], str]:
     for width in range(min(3, len(words)), 0, -1):
         candidate = " ".join(words[:width])
         target = normalize_monitor_target(candidate)
-        if target:
+        if target in monitor_targets():
             return [target], " ".join(words[width:])
-    return ([default] if default != "all" else monitor_targets()), rest
+    return [], rest
 
 
 def monitor_status(name: str, monitor: dict) -> str:
@@ -456,23 +462,18 @@ def help_text(state: dict) -> str:
         "- /status - show trigger, dates, and watched campsites\n"
         "- /help - show this command guide\n\n"
         "Turn monitors on/off\n"
-        "- /start all - turn on every campsite\n"
+        "- /start all - turn on every Yosemite campsite\n"
         "- /start upper yosemite\n"
         "- /start north yosemite\n"
         "- /start lower yosemite\n"
-        "- /start north summit lassen\n"
-        "- /start south summit lassen\n"
-        "- /start prairie redwoods\n"
-        "- /start gold bluffs redwoods\n"
-        "- /stop all - turn off all monitors\n"
+        "- /stop all - turn off all Yosemite monitors\n"
         "- /stop upper yosemite - turn off one campsite\n\n"
         "Run a check\n"
-        "- /check all - check every monitor on the next workflow run\n"
+        "- /check all - check every Yosemite monitor on the next workflow run\n"
         "- /check upper yosemite - check one campsite once\n"
-        "- /monitors - list every campsite name\n\n"
+        "- /monitors - list every available Yosemite campsite name\n\n"
         "Change dates\n"
         "- /dates upper yosemite 2026-05-22 2026-05-26\n"
-        "- /dates prairie redwoods 2026-05-24 2026-05-26\n"
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n"
         "The range is checked one night at a time, so any available night will alert."
     )
@@ -500,17 +501,26 @@ def process_commands(state: dict) -> list[str]:
             send_telegram(status_text(state))
         elif command in {"/start", "/on", "/start_monitor"}:
             targets, _ = parse_target(rest)
+            if not targets:
+                send_telegram("Unknown monitor.\n\n" + monitors_text())
+                continue
             for target in targets:
                 state["monitors"][target]["enabled"] = True
                 force_checks.add(target)
             send_telegram("Monitor enabled.\n\n" + status_text(state))
         elif command in {"/stop", "/off"}:
             targets, _ = parse_target(rest)
+            if not targets:
+                send_telegram("Unknown monitor.\n\n" + monitors_text())
+                continue
             for target in targets:
                 state["monitors"][target]["enabled"] = False
             send_telegram("Monitor disabled.\n\n" + status_text(state))
         elif command == "/check":
             targets, _ = parse_target(rest)
+            if not targets:
+                send_telegram("Unknown monitor.\n\n" + monitors_text())
+                continue
             force_checks.update(targets)
             send_telegram("Running availability check for: " + ", ".join(targets))
         elif command in {"/monitors", "/list"}:
