@@ -14,12 +14,24 @@ cloud_monitor = importlib.import_module("cloud_monitor")
 class MonitorLogicTests(unittest.TestCase):
     def test_geronimo_uses_legacy_chat_id_fallback(self):
         self.assertEqual(cloud_monitor.TELEGRAM_USERS["geronimo"]["name"], "Geronimo")
+        self.assertEqual(cloud_monitor.TELEGRAM_USERS["geronimo"]["bot_token"], "test-token")
         self.assertEqual(cloud_monitor.TELEGRAM_USERS["geronimo"]["chat_id"], "123")
+
+    def test_sophia_loads_from_named_bot_and_chat_secrets(self):
+        with patch.dict(os.environ, {
+            "SOPHIA_TELEGRAM_BOT_TOKEN": "sophia-token",
+            "SOPHIA_TELEGRAM_CHAT_ID": "456",
+        }):
+            users = cloud_monitor.load_telegram_users()
+
+        self.assertEqual(users["sophia"]["name"], "Sophia")
+        self.assertEqual(users["sophia"]["bot_token"], "sophia-token")
+        self.assertEqual(users["sophia"]["chat_id"], "456")
 
     def test_send_telegram_broadcasts_to_configured_users(self):
         users = {
-            "geronimo": {"id": "geronimo", "name": "Geronimo", "chat_id": "123"},
-            "second": {"id": "second", "name": "Second", "chat_id": "456"},
+            "geronimo": {"id": "geronimo", "name": "Geronimo", "bot_token": "first-token", "chat_id": "123"},
+            "sophia": {"id": "sophia", "name": "Sophia", "bot_token": "second-token", "chat_id": "456"},
         }
 
         with (
@@ -28,8 +40,9 @@ class MonitorLogicTests(unittest.TestCase):
         ):
             cloud_monitor.send_telegram("hello")
 
-        send_telegram_to.assert_any_call("123", "hello")
-        send_telegram_to.assert_any_call("456", "hello")
+        sent_users = [call.args[0]["id"] for call in send_telegram_to.call_args_list]
+        self.assertEqual(sent_users, ["geronimo", "sophia"])
+        self.assertEqual([call.args[1] for call in send_telegram_to.call_args_list], ["hello", "hello"])
         self.assertEqual(send_telegram_to.call_count, 2)
 
     def test_process_commands_replies_to_authorized_user_chat(self):
@@ -47,7 +60,7 @@ class MonitorLogicTests(unittest.TestCase):
 
         self.assertEqual(force_checks, [])
         self.assertEqual(send_telegram_to.call_count, 1)
-        self.assertEqual(send_telegram_to.call_args.args[0], "123")
+        self.assertEqual(send_telegram_to.call_args.args[0]["id"], "geronimo")
         self.assertIn("Campsite monitors", send_telegram_to.call_args.args[1])
 
     def test_monitor_targets_are_only_yosemite_pines(self):

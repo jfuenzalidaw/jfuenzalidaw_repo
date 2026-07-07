@@ -107,6 +107,10 @@ def default_state() -> dict:
     }
     return {
         "last_update_id": 0,
+        "telegram_users": {
+            "geronimo": {"last_update_id": 0},
+            "sophia": {"last_update_id": 0},
+        },
         "monitors": {
             "upper_yosemite": dict(recreation_dates),
             "north_yosemite": dict(recreation_dates),
@@ -158,6 +162,10 @@ def migrate_state(raw: dict) -> dict:
     state = default_state()
     if "monitors" in raw:
         state["last_update_id"] = raw.get("last_update_id", 0)
+        state["telegram_users"]["geronimo"]["last_update_id"] = raw.get("last_update_id", 0)
+        for user_id, user_state in raw.get("telegram_users", {}).items():
+            if user_id in state["telegram_users"]:
+                state["telegram_users"][user_id].update(user_state)
         monitors = raw.get("monitors", {})
         for name, monitor in monitors.items():
             if name in state["monitors"]:
@@ -170,6 +178,7 @@ def migrate_state(raw: dict) -> dict:
 
     # Backward compatibility with the original single Yosemite monitor state.
     state["last_update_id"] = raw.get("last_update_id", 0)
+    state["telegram_users"]["geronimo"]["last_update_id"] = raw.get("last_update_id", 0)
     migrate_old_yosemite_group(state, {
         "enabled": raw.get("enabled", False),
         "checkin": raw.get("checkin"),
@@ -200,13 +209,18 @@ def env_optional(name: str) -> str:
     return os.getenv(name, "").strip()
 
 
-BOT_TOKEN = env_required("TELEGRAM_BOT_TOKEN")
-
 TELEGRAM_USER_CONFIG = {
     "geronimo": {
         "name": "Geronimo",
+        "bot_token_env": "GERONIMO_TELEGRAM_BOT_TOKEN",
+        "fallback_bot_token_env": "TELEGRAM_BOT_TOKEN",
         "chat_id_env": "GERONIMO_TELEGRAM_CHAT_ID",
         "fallback_chat_id_env": "TELEGRAM_CHAT_ID",
+    },
+    "sophia": {
+        "name": "Sophia",
+        "bot_token_env": "SOPHIA_TELEGRAM_BOT_TOKEN",
+        "chat_id_env": "SOPHIA_TELEGRAM_CHAT_ID",
     },
 }
 
@@ -214,24 +228,30 @@ TELEGRAM_USER_CONFIG = {
 def load_telegram_users() -> dict[str, dict]:
     users = {}
     for user_id, config in TELEGRAM_USER_CONFIG.items():
-        chat_id = env_optional(config["chat_id_env"]) or env_optional(config["fallback_chat_id_env"])
-        if chat_id:
+        bot_token = env_optional(config["bot_token_env"])
+        if config.get("fallback_bot_token_env"):
+            bot_token = bot_token or env_optional(config["fallback_bot_token_env"])
+        chat_id = env_optional(config["chat_id_env"])
+        if config.get("fallback_chat_id_env"):
+            chat_id = chat_id or env_optional(config["fallback_chat_id_env"])
+        if bot_token and chat_id:
             users[user_id] = {
                 "id": user_id,
                 "name": config["name"],
+                "bot_token": bot_token,
                 "chat_id": chat_id,
             }
     if not users:
-        raise RuntimeError("Missing required environment variable: GERONIMO_TELEGRAM_CHAT_ID or TELEGRAM_CHAT_ID")
+        raise RuntimeError("Missing required Telegram bot token/chat ID configuration")
     return users
 
 
 TELEGRAM_USERS = load_telegram_users()
 
 
-def telegram_api(method: str, **data):
+def telegram_api(user: dict, method: str, **data):
     resp = requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/{method}",
+        f"https://api.telegram.org/bot{user['bot_token']}/{method}",
         data=data,
         timeout=20,
     )
@@ -242,33 +262,28 @@ def telegram_api(method: str, **data):
     return payload["result"]
 
 
-def configured_chat_ids() -> list[str]:
-    chat_ids = []
+def configured_telegram_users() -> list[dict]:
+    users = []
+    seen = set()
     for user in TELEGRAM_USERS.values():
-        chat_id = user["chat_id"]
-        if chat_id not in chat_ids:
-            chat_ids.append(chat_id)
-    return chat_ids
+        key = (user["bot_token"], user["chat_id"])
+        if key not in seen:
+            seen.add(key)
+            users.append(user)
+    return users
 
 
-def telegram_user_for_chat(chat_id: str) -> dict | None:
-    for user in TELEGRAM_USERS.values():
-        if str(user["chat_id"]) == str(chat_id):
-            return user
-    return None
-
-
-def send_telegram_to(chat_id: str, message: str) -> None:
-    telegram_api("sendMessage", chat_id=chat_id, text=message, parse_mode="HTML", disable_web_page_preview=True)
+def send_telegram_to(user: dict, message: str) -> None:
+    telegram_api(user, "sendMessage", chat_id=user["chat_id"], text=message, parse_mode="HTML", disable_web_page_preview=True)
 
 
 def send_telegram(message: str) -> None:
-    for chat_id in configured_chat_ids():
-        send_telegram_to(chat_id, message)
+    for user in configured_telegram_users():
+        send_telegram_to(user, message)
 
 
-def get_updates(offset: int):
-    return telegram_api("getUpdates", offset=offset, timeout=0, allowed_updates=json.dumps(["message"]))
+def get_updates(user: dict, offset: int):
+    return telegram_api(user, "getUpdates", offset=offset, timeout=0, allowed_updates=json.dumps(["message"]))
 
 
 def base_headers(origin: str = "https://www.recreation.gov/") -> dict:
@@ -531,76 +546,80 @@ def help_text(state: dict) -> str:
 
 def process_commands(state: dict) -> list[str]:
     force_checks: set[str] = set()
-    updates = get_updates(int(state.get("last_update_id", 0)) + 1)
-    for update in updates:
-        state["last_update_id"] = max(int(state.get("last_update_id", 0)), int(update["update_id"]))
-        message = update.get("message") or {}
-        chat_id = str((message.get("chat") or {}).get("id", ""))
-        user = telegram_user_for_chat(chat_id)
-        if not user:
-            continue
-        text = (message.get("text") or "").strip()
-        if not text:
-            continue
+    state.setdefault("telegram_users", {})
+    for user in configured_telegram_users():
+        user_state = state["telegram_users"].setdefault(user["id"], {"last_update_id": 0})
+        updates = get_updates(user, int(user_state.get("last_update_id", 0)) + 1)
+        for update in updates:
+            user_state["last_update_id"] = max(int(user_state.get("last_update_id", 0)), int(update["update_id"]))
+            if user["id"] == "geronimo":
+                state["last_update_id"] = user_state["last_update_id"]
+            message = update.get("message") or {}
+            chat_id = str((message.get("chat") or {}).get("id", ""))
+            if chat_id != str(user["chat_id"]):
+                continue
+            text = (message.get("text") or "").strip()
+            if not text:
+                continue
 
-        command, _, rest = text.partition(" ")
-        command = command.lower().split("@", 1)[0]
+            command, _, rest = text.partition(" ")
+            command = command.lower().split("@", 1)[0]
 
-        if command in {"/help", "/commands"}:
-            send_telegram_to(chat_id, help_text(state))
-        elif command == "/status":
-            send_telegram_to(chat_id, status_text(state))
-        elif command in {"/start", "/on", "/start_monitor"}:
-            targets, _ = parse_target(rest)
-            if not targets:
-                send_telegram_to(chat_id, "Unknown monitor.\n\n" + monitors_text())
-                continue
-            for target in targets:
-                state["monitors"][target]["enabled"] = True
-                force_checks.add(target)
-            send_telegram_to(chat_id, "Monitor enabled.\n\n" + status_text(state))
-        elif command in {"/stop", "/off"}:
-            targets, _ = parse_target(rest)
-            if not targets:
-                send_telegram_to(chat_id, "Unknown monitor.\n\n" + monitors_text())
-                continue
-            for target in targets:
-                state["monitors"][target]["enabled"] = False
-            send_telegram_to(chat_id, "Monitor disabled.\n\n" + status_text(state))
-        elif command == "/check":
-            targets, _ = parse_target(rest)
-            if not targets:
-                send_telegram_to(chat_id, "Unknown monitor.\n\n" + monitors_text())
-                continue
-            force_checks.update(targets)
-            send_telegram_to(chat_id, "Running availability check for: " + ", ".join(targets))
-        elif command in {"/monitors", "/list"}:
-            send_telegram_to(chat_id, monitors_text())
-        elif command == "/settings":
-            send_telegram_to(chat_id, "Settings are managed in GitHub/cron-job.org now. Use /help for bot commands.")
-        elif command == "/dates":
-            targets, date_args = parse_target(rest)
-            if len(targets) != 1:
-                send_telegram_to(chat_id, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
-                continue
-            try:
-                ci_s, co_s = date_args.split()[:2]
-                checkin = dt.date.fromisoformat(ci_s)
-                checkout = dt.date.fromisoformat(co_s)
-                if checkout <= checkin:
-                    raise ValueError("checkout must be after checkin")
-                monitor = state["monitors"][targets[0]]
-                monitor["checkin"] = checkin.isoformat()
-                monitor["checkout"] = checkout.isoformat()
-                monitor["last_alert_key"] = ""
-                force_checks.add(targets[0])
-                send_telegram_to(chat_id, f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
-            except Exception:
-                send_telegram_to(chat_id, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
-        elif command == "/campgrounds":
-            send_telegram_to(chat_id, "Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
-        else:
-            send_telegram_to(chat_id, "Unknown command.\n\n" + status_text(state))
+            if command in {"/help", "/commands"}:
+                send_telegram_to(user, help_text(state))
+            elif command == "/status":
+                send_telegram_to(user, status_text(state))
+            elif command in {"/start", "/on", "/start_monitor"}:
+                targets, _ = parse_target(rest)
+                if not targets:
+                    send_telegram_to(user, "Unknown monitor.\n\n" + monitors_text())
+                    continue
+                for target in targets:
+                    state["monitors"][target]["enabled"] = True
+                    force_checks.add(target)
+                send_telegram_to(user, "Monitor enabled.\n\n" + status_text(state))
+            elif command in {"/stop", "/off"}:
+                targets, _ = parse_target(rest)
+                if not targets:
+                    send_telegram_to(user, "Unknown monitor.\n\n" + monitors_text())
+                    continue
+                for target in targets:
+                    state["monitors"][target]["enabled"] = False
+                send_telegram_to(user, "Monitor disabled.\n\n" + status_text(state))
+            elif command == "/check":
+                targets, _ = parse_target(rest)
+                if not targets:
+                    send_telegram_to(user, "Unknown monitor.\n\n" + monitors_text())
+                    continue
+                force_checks.update(targets)
+                send_telegram_to(user, "Running availability check for: " + ", ".join(targets))
+            elif command in {"/monitors", "/list"}:
+                send_telegram_to(user, monitors_text())
+            elif command == "/settings":
+                send_telegram_to(user, "Settings are managed in GitHub/cron-job.org now. Use /help for bot commands.")
+            elif command == "/dates":
+                targets, date_args = parse_target(rest)
+                if len(targets) != 1:
+                    send_telegram_to(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
+                    continue
+                try:
+                    ci_s, co_s = date_args.split()[:2]
+                    checkin = dt.date.fromisoformat(ci_s)
+                    checkout = dt.date.fromisoformat(co_s)
+                    if checkout <= checkin:
+                        raise ValueError("checkout must be after checkin")
+                    monitor = state["monitors"][targets[0]]
+                    monitor["checkin"] = checkin.isoformat()
+                    monitor["checkout"] = checkout.isoformat()
+                    monitor["last_alert_key"] = ""
+                    force_checks.add(targets[0])
+                    send_telegram_to(user, f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
+                except Exception:
+                    send_telegram_to(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
+            elif command == "/campgrounds":
+                send_telegram_to(user, "Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
+            else:
+                send_telegram_to(user, "Unknown command.\n\n" + status_text(state))
     return sorted(force_checks)
 
 

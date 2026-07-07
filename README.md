@@ -27,10 +27,13 @@ Add these repository secrets in GitHub:
 
 - `TELEGRAM_BOT_TOKEN`
 - `GERONIMO_TELEGRAM_CHAT_ID`
+- `SOPHIA_TELEGRAM_BOT_TOKEN`
+- `SOPHIA_TELEGRAM_CHAT_ID`
 
 `TELEGRAM_CHAT_ID` is still supported as the legacy fallback for Geronimo's
-conversation. Prefer `GERONIMO_TELEGRAM_CHAT_ID` for new configuration so
-additional Telegram conversations can be added as named users.
+conversation. `TELEGRAM_BOT_TOKEN` is still supported as the legacy fallback
+for Geronimo's bot token. Prefer named user secrets for new configuration so
+additional Telegram conversations can be added cleanly.
 
 Optional, for self-dispatching the next monitoring run when a scheduled run
 finishes:
@@ -43,8 +46,9 @@ Do not commit these values to the repository.
 ## Telegram Users
 
 The current Telegram conversation is linked to the named user `geronimo`.
-Commands are accepted only from configured user chat IDs. Availability alerts
-are sent to every configured user conversation.
+Sophia's conversation is linked to the named user `sophia` and bot username
+`Yosemite_sofiag_bot`. Commands are accepted only from configured user chat IDs.
+Availability alerts are sent to every configured user conversation.
 
 ## Telegram Commands
 

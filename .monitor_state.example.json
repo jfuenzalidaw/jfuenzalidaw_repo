@@ -1,5 +1,13 @@
 {
   "last_update_id": 0,
+  "telegram_users": {
+    "geronimo": {
+      "last_update_id": 0
+    },
+    "sophia": {
+      "last_update_id": 0
+    }
+  },
   "monitors": {
     "gold_bluffs_redwoods": {
       "checkin": "2026-05-23",
