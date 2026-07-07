@@ -1,10 +1,18 @@
 name: Yosemite Monitor
 
 on:
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
-  repository_dispatch:
-    types:
-      - yosemite-monitor
+    inputs:
+      monitoring_cycles:
+        description: "Manual-run monitoring cycles. Scheduled runs always use 20 cycles."
+        required: false
+        default: "1"
+      continue_monitoring:
+        description: "Dispatch the next monitoring run when this one finishes."
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -19,6 +27,9 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CONTINUE_MONITORING: ${{ github.event_name == 'schedule' && 'true' || inputs.continue_monitoring || 'false' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -36,7 +47,21 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python cloud_monitor.py
+          MONITORING_CYCLES: ${{ github.event_name == 'schedule' && '20' || inputs.monitoring_cycles || '1' }}
+          MONITORING_INTERVAL_SECONDS: "15"
+        run: |
+          for cycle in $(seq 1 "$MONITORING_CYCLES"); do
+            cycle_start=$(date +%s)
+            echo "Monitoring cycle ${cycle}/${MONITORING_CYCLES}"
+            python cloud_monitor.py
+            if [ "$cycle" -lt "$MONITORING_CYCLES" ]; then
+              elapsed=$(($(date +%s) - cycle_start))
+              sleep_seconds=$((MONITORING_INTERVAL_SECONDS - elapsed))
+              if [ "$sleep_seconds" -gt 0 ]; then
+                sleep "$sleep_seconds"
+              fi
+            fi
+          done
 
       - name: Save monitor state
         run: |
@@ -63,3 +88,17 @@ jobs:
               sleep 2
             done
           fi
+
+      - name: Dispatch next monitoring run
+        if: ${{ always() && env.CONTINUE_MONITORING == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.CAMPSITE_GH_WORKFLOW_PAT || secrets.GH_WORKFLOW_PAT }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "No workflow PAT configured; skipping self-dispatch."
+            exit 0
+          fi
+          gh workflow run yosemite-monitor.yml \
+            --ref main \
+            -f monitoring_cycles=20 \
+            -f continue_monitoring=true

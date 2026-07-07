@@ -5,8 +5,9 @@ Headless campsite availability monitor for GitHub Actions.
 The workflow checks Telegram commands and sends Telegram alerts when matching
 campsites are available. Each campsite is managed as its own monitor. Date
 ranges are checked one night at a time, so a range alerts when at least one
-one-night stay inside that range is available. The workflow is triggered by
-cron-job.org using GitHub `repository_dispatch`.
+one-night stay inside that range is available. GitHub Actions schedules the
+workflow every five minutes, and each scheduled run checks every 15 seconds
+while it is active.
 
 ## Monitor Names
 
@@ -34,6 +35,12 @@ Add these repository secrets in GitHub:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+
+Optional, for self-dispatching the next monitoring run when a scheduled run
+finishes:
+
+- `CAMPSITE_GH_WORKFLOW_PAT`
+- `GH_WORKFLOW_PAT`
 
 Do not commit these values to the repository.
 
@@ -76,9 +83,22 @@ ReserveCalifornia:
 
 ## Trigger
 
-The only recurring trigger is cron-job.org calling GitHub `repository_dispatch`.
+The recurring trigger is GitHub Actions schedule:
+
+```text
+*/5 * * * *
+```
+
+GitHub scheduled workflows use a five-minute cron because that is GitHub
+Actions' shortest supported schedule interval. Each scheduled run performs 20
+monitoring cycles with a target 15-second start-to-start cadence. If a check
+takes longer than 15 seconds, the next cycle starts after the current check
+finishes instead of overlapping it.
+
 The workflow also keeps `workflow_dispatch` so you can manually test it from the
-GitHub Actions tab.
+GitHub Actions tab. The workflow can self-dispatch the next run with
+`continue_monitoring=true` when `CAMPSITE_GH_WORKFLOW_PAT` or `GH_WORKFLOW_PAT`
+is configured.
 
 ## Notes
 
