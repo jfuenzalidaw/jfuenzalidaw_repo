@@ -567,6 +567,8 @@ def process_commands(state: dict) -> list[str]:
 
             if command in {"/help", "/commands"}:
                 send_telegram_to(user, help_text(state))
+            elif command == "/start" and not rest.strip():
+                send_telegram_to(user, help_text(state))
             elif command == "/status":
                 send_telegram_to(user, status_text(state))
             elif command in {"/start", "/on", "/start_monitor"}:

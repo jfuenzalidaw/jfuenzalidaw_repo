@@ -63,6 +63,24 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(send_telegram_to.call_args.args[0]["id"], "geronimo")
         self.assertIn("Campsite monitors", send_telegram_to.call_args.args[1])
 
+    def test_bare_start_replies_with_help_without_enabling_monitors(self):
+        state = cloud_monitor.default_state()
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/start"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        self.assertFalse(state["monitors"]["upper_yosemite"]["enabled"])
+        self.assertFalse(state["monitors"]["north_yosemite"]["enabled"])
+        self.assertFalse(state["monitors"]["lower_yosemite"]["enabled"])
+        self.assertIn("Campsite monitor commands", send_telegram_to.call_args.args[1])
+
     def test_monitor_targets_are_only_yosemite_pines(self):
         self.assertEqual(
             cloud_monitor.monitor_targets(),
