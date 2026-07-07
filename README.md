@@ -26,7 +26,11 @@ Telegram commands also accept the same names with spaces:
 Add these repository secrets in GitHub:
 
 - `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
+- `GERONIMO_TELEGRAM_CHAT_ID`
+
+`TELEGRAM_CHAT_ID` is still supported as the legacy fallback for Geronimo's
+conversation. Prefer `GERONIMO_TELEGRAM_CHAT_ID` for new configuration so
+additional Telegram conversations can be added as named users.
 
 Optional, for self-dispatching the next monitoring run when a scheduled run
 finishes:
@@ -35,6 +39,12 @@ finishes:
 - `GH_WORKFLOW_PAT`
 
 Do not commit these values to the repository.
+
+## Telegram Users
+
+The current Telegram conversation is linked to the named user `geronimo`.
+Commands are accepted only from configured user chat IDs. Availability alerts
+are sent to every configured user conversation.
 
 ## Telegram Commands
 

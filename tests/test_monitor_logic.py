@@ -5,13 +5,51 @@ import unittest
 from unittest.mock import Mock, patch
 
 
-os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
-os.environ.setdefault("TELEGRAM_CHAT_ID", "123")
+os.environ["TELEGRAM_BOT_TOKEN"] = "test-token"
+os.environ["TELEGRAM_CHAT_ID"] = "123"
 
 cloud_monitor = importlib.import_module("cloud_monitor")
 
 
 class MonitorLogicTests(unittest.TestCase):
+    def test_geronimo_uses_legacy_chat_id_fallback(self):
+        self.assertEqual(cloud_monitor.TELEGRAM_USERS["geronimo"]["name"], "Geronimo")
+        self.assertEqual(cloud_monitor.TELEGRAM_USERS["geronimo"]["chat_id"], "123")
+
+    def test_send_telegram_broadcasts_to_configured_users(self):
+        users = {
+            "geronimo": {"id": "geronimo", "name": "Geronimo", "chat_id": "123"},
+            "second": {"id": "second", "name": "Second", "chat_id": "456"},
+        }
+
+        with (
+            patch.object(cloud_monitor, "TELEGRAM_USERS", users),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            cloud_monitor.send_telegram("hello")
+
+        send_telegram_to.assert_any_call("123", "hello")
+        send_telegram_to.assert_any_call("456", "hello")
+        self.assertEqual(send_telegram_to.call_count, 2)
+
+    def test_process_commands_replies_to_authorized_user_chat(self):
+        state = cloud_monitor.default_state()
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "999"}, "text": "/status"}},
+            {"update_id": 2, "message": {"chat": {"id": "123"}, "text": "/status"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        self.assertEqual(send_telegram_to.call_count, 1)
+        self.assertEqual(send_telegram_to.call_args.args[0], "123")
+        self.assertIn("Campsite monitors", send_telegram_to.call_args.args[1])
+
     def test_monitor_targets_are_only_yosemite_pines(self):
         self.assertEqual(
             cloud_monitor.monitor_targets(),

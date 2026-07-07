@@ -49,6 +49,7 @@ jobs:
       - name: Run monitor
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GERONIMO_TELEGRAM_CHAT_ID: ${{ secrets.GERONIMO_TELEGRAM_CHAT_ID }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MONITORING_CYCLES: ${{ github.event_name == 'workflow_dispatch' && inputs.monitoring_cycles || github.event_name == 'repository_dispatch' && '8' || '20' }}
           MONITORING_INTERVAL_SECONDS: "15"
