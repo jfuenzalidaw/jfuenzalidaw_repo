@@ -10,7 +10,7 @@
     "lower_yosemite": {
       "checkin": "2026-09-17",
       "checkout": "2026-09-23",
-      "enabled": false,
+      "enabled": true,
       "last_alert_key": ""
     },
     "north_summit_lassen": {
@@ -22,7 +22,7 @@
     "north_yosemite": {
       "checkin": "2026-09-17",
       "checkout": "2026-09-23",
-      "enabled": false,
+      "enabled": true,
       "last_alert_key": ""
     },
     "prairie_redwoods": {
@@ -40,7 +40,7 @@
     "upper_yosemite": {
       "checkin": "2026-09-17",
       "checkout": "2026-09-23",
-      "enabled": false,
+      "enabled": true,
       "last_alert_key": ""
     }
   },
@@ -49,7 +49,7 @@
       "last_update_id": 55343199
     },
     "sophia": {
-      "last_update_id": 606628366
+      "last_update_id": 606628367
     }
   }
 }
