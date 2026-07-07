@@ -43,5 +43,13 @@
       "enabled": false,
       "last_alert_key": ""
     }
+  },
+  "telegram_users": {
+    "geronimo": {
+      "last_update_id": 55343193
+    },
+    "sophia": {
+      "last_update_id": 0
+    }
   }
 }
