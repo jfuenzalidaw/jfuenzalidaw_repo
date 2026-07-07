@@ -3,6 +3,9 @@ name: Yosemite Monitor
 on:
   schedule:
     - cron: "*/5 * * * *"
+  repository_dispatch:
+    types:
+      - yosemite-monitor
   workflow_dispatch:
     inputs:
       monitoring_cycles:
@@ -47,7 +50,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          MONITORING_CYCLES: ${{ github.event_name == 'schedule' && '20' || inputs.monitoring_cycles || '1' }}
+          MONITORING_CYCLES: ${{ github.event_name == 'workflow_dispatch' && inputs.monitoring_cycles || github.event_name == 'repository_dispatch' && '8' || '20' }}
           MONITORING_INTERVAL_SECONDS: "15"
         run: |
           for cycle in $(seq 1 "$MONITORING_CYCLES"); do
