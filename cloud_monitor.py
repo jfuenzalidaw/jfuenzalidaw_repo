@@ -277,6 +277,14 @@ def send_telegram_to(user: dict, message: str) -> None:
     telegram_api(user, "sendMessage", chat_id=user["chat_id"], text=message, parse_mode="HTML", disable_web_page_preview=True)
 
 
+def user_reply(user: dict, message: str) -> str:
+    return f"Hi {user['name']},\n\n{message}"
+
+
+def send_user_reply(user: dict, message: str) -> None:
+    send_telegram_to(user, user_reply(user, message))
+
+
 def send_telegram(message: str) -> None:
     for user in configured_telegram_users():
         send_telegram_to(user, message)
@@ -566,43 +574,43 @@ def process_commands(state: dict) -> list[str]:
             command = command.lower().split("@", 1)[0]
 
             if command in {"/help", "/commands"}:
-                send_telegram_to(user, help_text(state))
+                send_user_reply(user, help_text(state))
             elif command == "/start" and not rest.strip():
-                send_telegram_to(user, help_text(state))
+                send_user_reply(user, help_text(state))
             elif command == "/status":
-                send_telegram_to(user, status_text(state))
+                send_user_reply(user, status_text(state))
             elif command in {"/start", "/on", "/start_monitor"}:
                 targets, _ = parse_target(rest)
                 if not targets:
-                    send_telegram_to(user, "Unknown monitor.\n\n" + monitors_text())
+                    send_user_reply(user, "Unknown monitor.\n\n" + monitors_text())
                     continue
                 for target in targets:
                     state["monitors"][target]["enabled"] = True
                     force_checks.add(target)
-                send_telegram_to(user, "Monitor enabled.\n\n" + status_text(state))
+                send_user_reply(user, "Monitor enabled.\n\n" + status_text(state))
             elif command in {"/stop", "/off"}:
                 targets, _ = parse_target(rest)
                 if not targets:
-                    send_telegram_to(user, "Unknown monitor.\n\n" + monitors_text())
+                    send_user_reply(user, "Unknown monitor.\n\n" + monitors_text())
                     continue
                 for target in targets:
                     state["monitors"][target]["enabled"] = False
-                send_telegram_to(user, "Monitor disabled.\n\n" + status_text(state))
+                send_user_reply(user, "Monitor disabled.\n\n" + status_text(state))
             elif command == "/check":
                 targets, _ = parse_target(rest)
                 if not targets:
-                    send_telegram_to(user, "Unknown monitor.\n\n" + monitors_text())
+                    send_user_reply(user, "Unknown monitor.\n\n" + monitors_text())
                     continue
                 force_checks.update(targets)
-                send_telegram_to(user, "Running availability check for: " + ", ".join(targets))
+                send_user_reply(user, "Running availability check for: " + ", ".join(targets))
             elif command in {"/monitors", "/list"}:
-                send_telegram_to(user, monitors_text())
+                send_user_reply(user, monitors_text())
             elif command == "/settings":
-                send_telegram_to(user, "Settings are managed in GitHub/cron-job.org now. Use /help for bot commands.")
+                send_user_reply(user, "Settings are managed in GitHub/cron-job.org now. Use /help for bot commands.")
             elif command == "/dates":
                 targets, date_args = parse_target(rest)
                 if len(targets) != 1:
-                    send_telegram_to(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
+                    send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
                     continue
                 try:
                     ci_s, co_s = date_args.split()[:2]
@@ -615,13 +623,13 @@ def process_commands(state: dict) -> list[str]:
                     monitor["checkout"] = checkout.isoformat()
                     monitor["last_alert_key"] = ""
                     force_checks.add(targets[0])
-                    send_telegram_to(user, f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
+                    send_user_reply(user, f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
                 except Exception:
-                    send_telegram_to(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
+                    send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
             elif command == "/campgrounds":
-                send_telegram_to(user, "Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
+                send_user_reply(user, "Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
             else:
-                send_telegram_to(user, "Unknown command.\n\n" + status_text(state))
+                send_user_reply(user, "Unknown command.\n\n" + status_text(state))
     return sorted(force_checks)
 
 

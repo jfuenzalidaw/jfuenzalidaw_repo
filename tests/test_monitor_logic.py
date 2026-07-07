@@ -61,6 +61,7 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(force_checks, [])
         self.assertEqual(send_telegram_to.call_count, 1)
         self.assertEqual(send_telegram_to.call_args.args[0]["id"], "geronimo")
+        self.assertTrue(send_telegram_to.call_args.args[1].startswith("Hi Geronimo,"))
         self.assertIn("Campsite monitors", send_telegram_to.call_args.args[1])
 
     def test_bare_start_replies_with_help_without_enabling_monitors(self):
@@ -79,6 +80,7 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertFalse(state["monitors"]["upper_yosemite"]["enabled"])
         self.assertFalse(state["monitors"]["north_yosemite"]["enabled"])
         self.assertFalse(state["monitors"]["lower_yosemite"]["enabled"])
+        self.assertTrue(send_telegram_to.call_args.args[1].startswith("Hi Geronimo,"))
         self.assertIn("Campsite monitor commands", send_telegram_to.call_args.args[1])
 
     def test_monitor_targets_are_only_yosemite_pines(self):
