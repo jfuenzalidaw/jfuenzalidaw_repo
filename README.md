@@ -3,11 +3,11 @@
 Headless campsite availability monitor for GitHub Actions.
 
 The workflow checks Telegram commands and sends Telegram alerts when matching
-campsites are available. Each campsite is managed as its own monitor. Date
-ranges are checked one night at a time, so a range alerts when at least one
-one-night stay inside that range is available. GitHub Actions schedules the
-workflow every five minutes, and the existing external dispatch can also wake
-the workflow. Each active run checks every 15 seconds while it is active.
+campsites are available. Each Telegram user has independent monitor settings,
+including enabled campsites, date ranges, alert memory, and search mode. Date
+ranges are checked one night at a time. GitHub Actions schedules the workflow
+every five minutes, and the existing external dispatch can also wake the
+workflow. Each active run checks every 15 seconds while it is active.
 
 ## Monitor Names
 
@@ -48,7 +48,8 @@ Do not commit these values to the repository.
 The current Telegram conversation is linked to the named user `geronimo`.
 Sophia's conversation is linked to the named user `sophia` and bot username
 `Yosemite_sofiag_bot`. Commands are accepted only from configured user chat IDs.
-Availability alerts are sent to every configured user conversation.
+Each user has separate settings. Availability alerts are sent only to the user
+whose monitor settings matched availability.
 
 ## Telegram Commands
 
@@ -64,10 +65,19 @@ Send commands to your bot:
 - `/check all` - run one check for every Yosemite campsite on the next workflow run
 - `/check upper yosemite` - run one campsite check
 - `/dates upper yosemite 2026-05-22 2026-05-26` - set dates for one campsite
+- `/mode upper yosemite any` - alert if any night is available
+- `/mode upper yosemite all` - alert only if every night is available
+- `/mode upper yosemite consecutive 2` - alert if two consecutive nights are available
 
 Date ranges are scanned as one-night stays. For example,
 `/dates upper yosemite 2026-05-22 2026-05-26` checks May 22-23, May 23-24,
 May 24-25, and May 25-26 independently.
+
+Search modes are per user and per monitor:
+
+- `any` - alerts when at least one night in the selected range is available.
+- `all` - alerts only when every one-night stay in the selected range is available.
+- `consecutive N` - alerts when at least `N` consecutive one-night stays are available.
 
 Old campground grouping commands such as `/campgrounds yosemite ...` are no
 longer used. Use the individual monitor names above instead.

@@ -59,6 +59,14 @@ ACTIVE_MONITORS = (
     "lower_yosemite",
 )
 
+SEARCH_MODES = {
+    "any": "any available night",
+    "all": "every night in the date range",
+    "consecutive": "at least N consecutive available nights",
+}
+DEFAULT_SEARCH_MODE = "any"
+DEFAULT_MIN_CONSECUTIVE_NIGHTS = 2
+
 MONITOR_ALIASES = {
     "upper": "upper_yosemite",
     "upper_yosemite": "upper_yosemite",
@@ -97,38 +105,36 @@ AVAIL_API = "https://www.recreation.gov/api/camps/availability/campground/{id}/m
 STATE_PATH = Path(".monitor_state.json")
 
 
-def default_state() -> dict:
-    today = dt.date.today()
-    recreation_dates = {
+def default_monitor_settings(today: dt.date | None = None) -> dict:
+    today = today or dt.date.today()
+    return {
         "enabled": False,
         "checkin": (today + dt.timedelta(days=1)).isoformat(),
         "checkout": (today + dt.timedelta(days=4)).isoformat(),
         "last_alert_key": "",
+        "mode": DEFAULT_SEARCH_MODE,
+        "min_consecutive_nights": DEFAULT_MIN_CONSECUTIVE_NIGHTS,
     }
+
+
+def default_user_monitors(today: dt.date | None = None) -> dict:
+    return {name: default_monitor_settings(today) for name in monitor_targets()}
+
+
+def default_user_state(today: dt.date | None = None) -> dict:
+    return {
+        "last_update_id": 0,
+        "monitors": default_user_monitors(today),
+    }
+
+
+def default_state() -> dict:
+    today = dt.date.today()
     return {
         "last_update_id": 0,
         "telegram_users": {
-            "geronimo": {"last_update_id": 0},
-            "sophia": {"last_update_id": 0},
-        },
-        "monitors": {
-            "upper_yosemite": dict(recreation_dates),
-            "north_yosemite": dict(recreation_dates),
-            "lower_yosemite": dict(recreation_dates),
-            "north_summit_lassen": dict(recreation_dates),
-            "south_summit_lassen": dict(recreation_dates),
-            "prairie_redwoods": {
-                "enabled": True,
-                "checkin": "2026-05-24",
-                "checkout": "2026-05-26",
-                "last_alert_key": "",
-            },
-            "gold_bluffs_redwoods": {
-                "enabled": True,
-                "checkin": "2026-05-23",
-                "checkout": "2026-05-25",
-                "last_alert_key": "",
-            },
+            "geronimo": default_user_state(today),
+            "sophia": default_user_state(today),
         },
     }
 
@@ -140,46 +146,80 @@ def recreation_monitor_by_facility_id(facility_id: str) -> str | None:
     return None
 
 
-def migrate_old_yosemite_group(state: dict, monitor: dict) -> None:
+def normalize_monitor_settings(monitor: dict) -> dict:
+    normalized = default_monitor_settings()
+    normalized.update(monitor)
+    if normalized.get("mode") not in SEARCH_MODES:
+        normalized["mode"] = DEFAULT_SEARCH_MODE
+    try:
+        min_nights = int(normalized.get("min_consecutive_nights", DEFAULT_MIN_CONSECUTIVE_NIGHTS))
+    except (TypeError, ValueError):
+        min_nights = DEFAULT_MIN_CONSECUTIVE_NIGHTS
+    normalized["min_consecutive_nights"] = max(1, min_nights)
+    return normalized
+
+
+def migrate_old_yosemite_group(monitors: dict, monitor: dict) -> None:
     selected = set(monitor.get("campgrounds", []))
     if not selected:
         selected = {config["facility_id"] for config in RECREATION_GOV_MONITORS.values()}
     for name, config in RECREATION_GOV_MONITORS.items():
-        state["monitors"][name].update({
+        if name not in monitors:
+            continue
+        monitors[name].update({
             "enabled": bool(monitor.get("enabled", False)) and config["facility_id"] in selected,
-            "checkin": monitor.get("checkin") or state["monitors"][name]["checkin"],
-            "checkout": monitor.get("checkout") or state["monitors"][name]["checkout"],
+            "checkin": monitor.get("checkin") or monitors[name]["checkin"],
+            "checkout": monitor.get("checkout") or monitors[name]["checkout"],
             "last_alert_key": "",
         })
 
 
-def migrate_old_reserve_ca_monitor(state: dict, old_name: str, new_name: str, monitors: dict) -> None:
-    if old_name in monitors:
-        state["monitors"][new_name].update(monitors[old_name])
+def migrate_old_reserve_ca_monitor(user_monitors: dict, old_name: str, new_name: str, monitors: dict) -> None:
+    if old_name in monitors and new_name in user_monitors:
+        user_monitors[new_name].update(monitors[old_name])
+
+
+def migrate_user_state(raw_user_state: dict, legacy_update_id: int = 0) -> dict:
+    user_state = default_user_state()
+    user_state["last_update_id"] = raw_user_state.get("last_update_id", legacy_update_id)
+    raw_monitors = raw_user_state.get("monitors", {})
+    for name, monitor in raw_monitors.items():
+        if name in user_state["monitors"]:
+            user_state["monitors"][name].update(monitor)
+    for name, monitor in list(user_state["monitors"].items()):
+        user_state["monitors"][name] = normalize_monitor_settings(monitor)
+    return user_state
 
 
 def migrate_state(raw: dict) -> dict:
     state = default_state()
+    legacy_update_id = raw.get("last_update_id", 0)
+    state["last_update_id"] = legacy_update_id
     if "monitors" in raw:
-        state["last_update_id"] = raw.get("last_update_id", 0)
-        state["telegram_users"]["geronimo"]["last_update_id"] = raw.get("last_update_id", 0)
-        for user_id, user_state in raw.get("telegram_users", {}).items():
-            if user_id in state["telegram_users"]:
-                state["telegram_users"][user_id].update(user_state)
         monitors = raw.get("monitors", {})
+        geronimo = state["telegram_users"]["geronimo"]
+        geronimo["last_update_id"] = legacy_update_id
         for name, monitor in monitors.items():
-            if name in state["monitors"]:
-                state["monitors"][name].update(monitor)
+            if name in geronimo["monitors"]:
+                geronimo["monitors"][name].update(monitor)
         if "yosemite" in monitors:
-            migrate_old_yosemite_group(state, monitors["yosemite"])
-        migrate_old_reserve_ca_monitor(state, "prairie", "prairie_redwoods", monitors)
-        migrate_old_reserve_ca_monitor(state, "gold_bluffs", "gold_bluffs_redwoods", monitors)
+            migrate_old_yosemite_group(geronimo["monitors"], monitors["yosemite"])
+        migrate_old_reserve_ca_monitor(geronimo["monitors"], "prairie", "prairie_redwoods", monitors)
+        migrate_old_reserve_ca_monitor(geronimo["monitors"], "gold_bluffs", "gold_bluffs_redwoods", monitors)
+        for name, monitor in list(geronimo["monitors"].items()):
+            geronimo["monitors"][name] = normalize_monitor_settings(monitor)
+    for user_id, raw_user_state in raw.get("telegram_users", {}).items():
+        if user_id in state["telegram_users"]:
+            if "monitors" in raw_user_state:
+                state["telegram_users"][user_id] = migrate_user_state(raw_user_state, legacy_update_id)
+            else:
+                state["telegram_users"][user_id]["last_update_id"] = raw_user_state.get("last_update_id", legacy_update_id)
+    if "monitors" in raw:
         return state
 
     # Backward compatibility with the original single Yosemite monitor state.
-    state["last_update_id"] = raw.get("last_update_id", 0)
-    state["telegram_users"]["geronimo"]["last_update_id"] = raw.get("last_update_id", 0)
-    migrate_old_yosemite_group(state, {
+    state["telegram_users"]["geronimo"]["last_update_id"] = legacy_update_id
+    migrate_old_yosemite_group(state["telegram_users"]["geronimo"]["monitors"], {
         "enabled": raw.get("enabled", False),
         "checkin": raw.get("checkin"),
         "checkout": raw.get("checkout"),
@@ -515,11 +555,15 @@ def parse_target(rest: str, default: str = "all") -> tuple[list[str], str]:
 def monitor_status(name: str, monitor: dict) -> str:
     mode = "ON" if monitor["enabled"] else "OFF"
     label = RECREATION_GOV_MONITORS.get(name, RESERVE_CA_MONITORS.get(name))["name"]
-    return f"{label}: {mode}\nDates: {monitor['checkin']} to {monitor['checkout']}"
+    search_mode = monitor.get("mode", DEFAULT_SEARCH_MODE)
+    mode_text = SEARCH_MODES.get(search_mode, SEARCH_MODES[DEFAULT_SEARCH_MODE])
+    if search_mode == "consecutive":
+        mode_text = f"at least {monitor.get('min_consecutive_nights', DEFAULT_MIN_CONSECUTIVE_NIGHTS)} consecutive available nights"
+    return f"{label}: {mode}\nDates: {monitor['checkin']} to {monitor['checkout']}\nMode: {mode_text}"
 
 
-def status_text(state: dict) -> str:
-    blocks = [monitor_status(name, state["monitors"][name]) for name in monitor_targets()]
+def status_text(user_state: dict) -> str:
+    blocks = [monitor_status(name, user_state["monitors"][name]) for name in monitor_targets()]
     return (
         "Campsite monitors\n\n"
         + "Trigger: external cron-job.org dispatch\n\n"
@@ -548,15 +592,40 @@ def help_text(state: dict) -> str:
         "Change dates\n"
         "- /dates upper yosemite 2026-05-22 2026-05-26\n"
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n"
-        "The range is checked one night at a time, so any available night will alert."
+        "The range is checked one night at a time.\n\n"
+        "Search mode\n"
+        "- /mode upper yosemite any - alert if any night is available\n"
+        "- /mode upper yosemite all - alert only if every night is available\n"
+        "- /mode upper yosemite consecutive 2 - alert if 2 consecutive nights are available"
     )
 
 
-def process_commands(state: dict) -> list[str]:
-    force_checks: set[str] = set()
+def parse_mode_args(rest: str) -> tuple[str | None, int | None]:
+    parts = rest.split()
+    if not parts:
+        return None, None
+    mode = parts[0].lower()
+    if mode in {"any", "anyday", "any_day", "any-night", "any_night"}:
+        return "any", None
+    if mode in {"all", "all-days", "all_days", "allnights", "all_nights"}:
+        return "all", None
+    if mode in {"consecutive", "consecutive-days", "consecutive_days", "consecutive-nights", "consecutive_nights"}:
+        min_nights = DEFAULT_MIN_CONSECUTIVE_NIGHTS
+        if len(parts) > 1:
+            try:
+                min_nights = max(1, int(parts[1]))
+            except ValueError:
+                return None, None
+        return "consecutive", min_nights
+    return None, None
+
+
+def process_commands(state: dict) -> list[tuple[str, str]]:
+    force_checks: set[tuple[str, str]] = set()
     state.setdefault("telegram_users", {})
     for user in configured_telegram_users():
-        user_state = state["telegram_users"].setdefault(user["id"], {"last_update_id": 0})
+        user_state = state["telegram_users"].setdefault(user["id"], default_user_state())
+        user_state.setdefault("monitors", default_user_monitors())
         updates = get_updates(user, int(user_state.get("last_update_id", 0)) + 1)
         for update in updates:
             user_state["last_update_id"] = max(int(user_state.get("last_update_id", 0)), int(update["update_id"]))
@@ -578,30 +647,30 @@ def process_commands(state: dict) -> list[str]:
             elif command == "/start" and not rest.strip():
                 send_user_reply(user, help_text(state))
             elif command == "/status":
-                send_user_reply(user, status_text(state))
+                send_user_reply(user, status_text(user_state))
             elif command in {"/start", "/on", "/start_monitor"}:
                 targets, _ = parse_target(rest)
                 if not targets:
                     send_user_reply(user, "Unknown monitor.\n\n" + monitors_text())
                     continue
                 for target in targets:
-                    state["monitors"][target]["enabled"] = True
-                    force_checks.add(target)
-                send_user_reply(user, "Monitor enabled.\n\n" + status_text(state))
+                    user_state["monitors"][target]["enabled"] = True
+                    force_checks.add((user["id"], target))
+                send_user_reply(user, "Monitor enabled.\n\n" + status_text(user_state))
             elif command in {"/stop", "/off"}:
                 targets, _ = parse_target(rest)
                 if not targets:
                     send_user_reply(user, "Unknown monitor.\n\n" + monitors_text())
                     continue
                 for target in targets:
-                    state["monitors"][target]["enabled"] = False
-                send_user_reply(user, "Monitor disabled.\n\n" + status_text(state))
+                    user_state["monitors"][target]["enabled"] = False
+                send_user_reply(user, "Monitor disabled.\n\n" + status_text(user_state))
             elif command == "/check":
                 targets, _ = parse_target(rest)
                 if not targets:
                     send_user_reply(user, "Unknown monitor.\n\n" + monitors_text())
                     continue
-                force_checks.update(targets)
+                force_checks.update((user["id"], target) for target in targets)
                 send_user_reply(user, "Running availability check for: " + ", ".join(targets))
             elif command in {"/monitors", "/list"}:
                 send_user_reply(user, monitors_text())
@@ -618,82 +687,145 @@ def process_commands(state: dict) -> list[str]:
                     checkout = dt.date.fromisoformat(co_s)
                     if checkout <= checkin:
                         raise ValueError("checkout must be after checkin")
-                    monitor = state["monitors"][targets[0]]
+                    monitor = user_state["monitors"][targets[0]]
                     monitor["checkin"] = checkin.isoformat()
                     monitor["checkout"] = checkout.isoformat()
                     monitor["last_alert_key"] = ""
-                    force_checks.add(targets[0])
+                    force_checks.add((user["id"], targets[0]))
                     send_user_reply(user, f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
                 except Exception:
                     send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
+            elif command == "/mode":
+                targets, mode_args = parse_target(rest)
+                if len(targets) != 1:
+                    send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
+                    continue
+                mode, min_nights = parse_mode_args(mode_args)
+                if not mode:
+                    send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
+                    continue
+                monitor = user_state["monitors"][targets[0]]
+                monitor["mode"] = mode
+                if min_nights is not None:
+                    monitor["min_consecutive_nights"] = min_nights
+                monitor["last_alert_key"] = ""
+                send_user_reply(user, "Search mode updated.\n\n" + monitor_status(targets[0], monitor))
             elif command == "/campgrounds":
                 send_user_reply(user, "Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
             else:
-                send_user_reply(user, "Unknown command.\n\n" + status_text(state))
+                send_user_reply(user, "Unknown command.\n\n" + status_text(user_state))
     return sorted(force_checks)
 
 
-def run_recreation_gov_check(name: str, monitor: dict) -> None:
+def matching_available_nights(available_nights: list[dict], checkin: dt.date, checkout: dt.date, monitor: dict) -> list[dict]:
+    mode = monitor.get("mode", DEFAULT_SEARCH_MODE)
+    if mode == "any":
+        return available_nights
+
+    windows = date_windows(checkin, checkout)
+    available_by_checkin = {night["checkin"]: night for night in available_nights}
+    if mode == "all":
+        if windows and all(start in available_by_checkin for start, _ in windows):
+            return [available_by_checkin[start] for start, _ in windows]
+        return []
+
+    if mode == "consecutive":
+        min_nights = max(1, int(monitor.get("min_consecutive_nights", DEFAULT_MIN_CONSECUTIVE_NIGHTS)))
+        matches = []
+        run = []
+        for start, _ in windows:
+            night = available_by_checkin.get(start)
+            if night:
+                run.append(night)
+                continue
+            if len(run) >= min_nights:
+                matches.extend(run)
+            run = []
+        if len(run) >= min_nights:
+            matches.extend(run)
+        return matches
+
+    return available_nights
+
+
+def availability_mode_label(monitor: dict) -> str:
+    mode = monitor.get("mode", DEFAULT_SEARCH_MODE)
+    if mode == "consecutive":
+        return f"at least {monitor.get('min_consecutive_nights', DEFAULT_MIN_CONSECUTIVE_NIGHTS)} consecutive available nights"
+    return SEARCH_MODES.get(mode, SEARCH_MODES[DEFAULT_SEARCH_MODE])
+
+
+def run_recreation_gov_check(user: dict, name: str, monitor: dict) -> None:
     config = RECREATION_GOV_MONITORS[name]
     checkin = dt.date.fromisoformat(monitor["checkin"])
     checkout = dt.date.fromisoformat(monitor["checkout"])
     available_nights = check_recreation_gov_nights(config["facility_id"], checkin, checkout)
-    print(f"{config['name']}: {len(available_nights)} available night(s)")
+    matching_nights = matching_available_nights(available_nights, checkin, checkout, monitor)
+    print(f"{user['id']} {config['name']}: {len(matching_nights)} matching night(s), {len(available_nights)} available night(s)")
 
     alert_parts = []
-    for night in available_nights:
+    for night in matching_nights:
         site_ids = ",".join(site["campsite_id"] for site in night["sites"][:20])
         alert_parts.append(f"{night['checkin'].isoformat()}:{site_ids}")
-    alert_key = "|".join(alert_parts)
-    if available_nights and alert_key != monitor.get("last_alert_key", ""):
-        send_telegram(
+    alert_key = f"{monitor.get('mode', DEFAULT_SEARCH_MODE)}:{monitor.get('min_consecutive_nights', DEFAULT_MIN_CONSECUTIVE_NIGHTS)}:" + "|".join(alert_parts)
+    if matching_nights and alert_key != monitor.get("last_alert_key", ""):
+        send_telegram_to(
+            user,
             f"Recreation.gov campsite available!\n\n"
             f"{config['name']}\n"
             f"Selected range: {format_date_window(checkin, checkout)}\n\n"
-            f"{format_recreation_nights(name, available_nights)}\n\nBook now!"
+            f"Mode: {availability_mode_label(monitor)}\n\n"
+            f"{format_recreation_nights(name, matching_nights)}\n\nBook now!"
         )
         monitor["last_alert_key"] = alert_key
-    elif not available_nights and monitor.get("last_alert_key"):
-        send_telegram(f"Previously found {config['name']} spots are gone. Keeping watch.")
+    elif not matching_nights and monitor.get("last_alert_key"):
+        send_telegram_to(user, f"Previously found {config['name']} spots are gone or no longer match your mode. Keeping watch.")
         monitor["last_alert_key"] = ""
 
 
-def run_reserve_ca_check(name: str, monitor: dict) -> None:
+def run_reserve_ca_check(user: dict, name: str, monitor: dict) -> None:
     config = RESERVE_CA_MONITORS[name]
     checkin = dt.date.fromisoformat(monitor["checkin"])
     checkout = dt.date.fromisoformat(monitor["checkout"])
     available_nights = check_reserve_ca_nights(name, checkin, checkout)
-    print(f"{config['name']}: {len(available_nights)} available night(s)")
-    alert_key = "|".join(night["checkin"].isoformat() for night in available_nights)
-    if available_nights and alert_key != monitor.get("last_alert_key", ""):
-        send_telegram(
+    matching_nights = matching_available_nights(available_nights, checkin, checkout, monitor)
+    print(f"{user['id']} {config['name']}: {len(matching_nights)} matching night(s), {len(available_nights)} available night(s)")
+    alert_key = f"{monitor.get('mode', DEFAULT_SEARCH_MODE)}:{monitor.get('min_consecutive_nights', DEFAULT_MIN_CONSECUTIVE_NIGHTS)}:" + "|".join(night["checkin"].isoformat() for night in matching_nights)
+    if matching_nights and alert_key != monitor.get("last_alert_key", ""):
+        send_telegram_to(
+            user,
             f"ReserveCalifornia campsite available!\n\n"
             f"{config['name']}\n"
             f"Selected range: {format_date_window(checkin, checkout)}\n\n"
-            f"{format_reserve_ca_nights(available_nights)}"
+            f"Mode: {availability_mode_label(monitor)}\n\n"
+            f"{format_reserve_ca_nights(matching_nights)}"
         )
         monitor["last_alert_key"] = alert_key
-    elif not available_nights and monitor.get("last_alert_key"):
-        send_telegram(f"Previously found {config['name']} spot is gone. Keeping watch.")
+    elif not matching_nights and monitor.get("last_alert_key"):
+        send_telegram_to(user, f"Previously found {config['name']} spot is gone or no longer matches your mode. Keeping watch.")
         monitor["last_alert_key"] = ""
 
 
-def run_checks(state: dict, force_checks: list[str]) -> None:
-    for name in monitor_targets():
-        monitor = state["monitors"][name]
-        if not monitor.get("enabled") and name not in force_checks:
-            print(f"{name} monitor is off")
-            continue
-        try:
-            if name in RECREATION_GOV_MONITORS:
-                run_recreation_gov_check(name, monitor)
-            else:
-                run_reserve_ca_check(name, monitor)
-        except requests.HTTPError as exc:
-            status = exc.response.status_code if exc.response is not None else "unknown"
-            print(f"{name} monitor HTTP error: {status}")
-        except Exception as exc:
-            print(f"{name} monitor error: {exc}")
+def run_checks(state: dict, force_checks: list[tuple[str, str]]) -> None:
+    forced = set(force_checks)
+    for user in configured_telegram_users():
+        user_state = state["telegram_users"].setdefault(user["id"], default_user_state())
+        user_state.setdefault("monitors", default_user_monitors())
+        for name in monitor_targets():
+            monitor = user_state["monitors"][name]
+            if not monitor.get("enabled") and (user["id"], name) not in forced:
+                print(f"{user['id']} {name} monitor is off")
+                continue
+            try:
+                if name in RECREATION_GOV_MONITORS:
+                    run_recreation_gov_check(user, name, monitor)
+                else:
+                    run_reserve_ca_check(user, name, monitor)
+            except requests.HTTPError as exc:
+                status = exc.response.status_code if exc.response is not None else "unknown"
+                print(f"{user['id']} {name} monitor HTTP error: {status}")
+            except Exception as exc:
+                print(f"{user['id']} {name} monitor error: {exc}")
 
 
 def main():

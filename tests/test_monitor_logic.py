@@ -77,11 +77,79 @@ class MonitorLogicTests(unittest.TestCase):
             force_checks = cloud_monitor.process_commands(state)
 
         self.assertEqual(force_checks, [])
-        self.assertFalse(state["monitors"]["upper_yosemite"]["enabled"])
-        self.assertFalse(state["monitors"]["north_yosemite"]["enabled"])
-        self.assertFalse(state["monitors"]["lower_yosemite"]["enabled"])
+        monitors = state["telegram_users"]["geronimo"]["monitors"]
+        self.assertFalse(monitors["upper_yosemite"]["enabled"])
+        self.assertFalse(monitors["north_yosemite"]["enabled"])
+        self.assertFalse(monitors["lower_yosemite"]["enabled"])
         self.assertTrue(send_telegram_to.call_args.args[1].startswith("Hi Geronimo,"))
         self.assertIn("Campsite monitor commands", send_telegram_to.call_args.args[1])
+
+    def test_users_have_independent_dates_and_modes(self):
+        state = cloud_monitor.default_state()
+        users = {
+            "geronimo": {"id": "geronimo", "name": "Geronimo", "bot_token": "first-token", "chat_id": "123"},
+            "sophia": {"id": "sophia", "name": "Sophia", "bot_token": "second-token", "chat_id": "456"},
+        }
+        updates_by_user = {
+            "geronimo": [
+                {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/dates upper yosemite 2026-08-01 2026-08-07"}},
+                {"update_id": 2, "message": {"chat": {"id": "123"}, "text": "/mode upper yosemite all"}},
+            ],
+            "sophia": [
+                {"update_id": 10, "message": {"chat": {"id": "456"}, "text": "/dates upper yosemite 2026-09-10 2026-09-12"}},
+                {"update_id": 11, "message": {"chat": {"id": "456"}, "text": "/mode upper yosemite consecutive 2"}},
+            ],
+        }
+
+        def updates_for_user(user, offset):
+            return updates_by_user[user["id"]]
+
+        with (
+            patch.object(cloud_monitor, "TELEGRAM_USERS", users),
+            patch.object(cloud_monitor, "get_updates", side_effect=updates_for_user),
+            patch.object(cloud_monitor, "send_telegram_to"),
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        geronimo_monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        sophia_monitor = state["telegram_users"]["sophia"]["monitors"]["upper_yosemite"]
+        self.assertEqual(geronimo_monitor["checkin"], "2026-08-01")
+        self.assertEqual(geronimo_monitor["checkout"], "2026-08-07")
+        self.assertEqual(geronimo_monitor["mode"], "all")
+        self.assertEqual(sophia_monitor["checkin"], "2026-09-10")
+        self.assertEqual(sophia_monitor["checkout"], "2026-09-12")
+        self.assertEqual(sophia_monitor["mode"], "consecutive")
+        self.assertEqual(sophia_monitor["min_consecutive_nights"], 2)
+        self.assertEqual(force_checks, [("geronimo", "upper_yosemite"), ("sophia", "upper_yosemite")])
+
+    def test_migrate_shared_monitor_state_into_geronimo_only(self):
+        raw = {
+            "last_update_id": 5,
+            "telegram_users": {
+                "geronimo": {"last_update_id": 6},
+                "sophia": {"last_update_id": 7},
+            },
+            "monitors": {
+                "upper_yosemite": {
+                    "enabled": True,
+                    "checkin": "2026-08-01",
+                    "checkout": "2026-08-07",
+                    "last_alert_key": "old",
+                },
+            },
+        }
+
+        state = cloud_monitor.migrate_state(raw)
+
+        geronimo_monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        sophia_monitor = state["telegram_users"]["sophia"]["monitors"]["upper_yosemite"]
+        self.assertTrue(geronimo_monitor["enabled"])
+        self.assertEqual(geronimo_monitor["checkin"], "2026-08-01")
+        self.assertEqual(geronimo_monitor["checkout"], "2026-08-07")
+        self.assertEqual(geronimo_monitor["mode"], "any")
+        self.assertFalse(sophia_monitor["enabled"])
+        self.assertEqual(state["telegram_users"]["geronimo"]["last_update_id"], 6)
+        self.assertEqual(state["telegram_users"]["sophia"]["last_update_id"], 7)
 
     def test_monitor_targets_are_only_yosemite_pines(self):
         self.assertEqual(
@@ -177,18 +245,51 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(available[0]["checkout"], dt.date(2026, 5, 24))
         self.assertEqual(available[0]["url"], "second")
 
+    def test_matching_available_nights_respects_all_mode(self):
+        nights = [
+            {"checkin": dt.date(2026, 5, 22), "checkout": dt.date(2026, 5, 23)},
+            {"checkin": dt.date(2026, 5, 23), "checkout": dt.date(2026, 5, 24)},
+        ]
+        monitor = {"mode": "all"}
+
+        self.assertEqual(
+            cloud_monitor.matching_available_nights(nights, dt.date(2026, 5, 22), dt.date(2026, 5, 24), monitor),
+            nights,
+        )
+        self.assertEqual(
+            cloud_monitor.matching_available_nights(nights[:1], dt.date(2026, 5, 22), dt.date(2026, 5, 24), monitor),
+            [],
+        )
+
+    def test_matching_available_nights_respects_consecutive_mode(self):
+        nights = [
+            {"checkin": dt.date(2026, 5, 22), "checkout": dt.date(2026, 5, 23)},
+            {"checkin": dt.date(2026, 5, 23), "checkout": dt.date(2026, 5, 24)},
+            {"checkin": dt.date(2026, 5, 25), "checkout": dt.date(2026, 5, 26)},
+        ]
+        monitor = {"mode": "consecutive", "min_consecutive_nights": 2}
+
+        self.assertEqual(
+            cloud_monitor.matching_available_nights(nights, dt.date(2026, 5, 22), dt.date(2026, 5, 26), monitor),
+            nights[:2],
+        )
+
     def test_run_checks_skips_hidden_enabled_monitors(self):
         state = cloud_monitor.default_state()
-        for monitor in state["monitors"].values():
+        for monitor in state["telegram_users"]["geronimo"]["monitors"].values():
             monitor["enabled"] = True
+        users = {
+            "geronimo": {"id": "geronimo", "name": "Geronimo", "bot_token": "first-token", "chat_id": "123"},
+        }
 
         with (
+            patch.object(cloud_monitor, "TELEGRAM_USERS", users),
             patch.object(cloud_monitor, "run_recreation_gov_check") as recreation_check,
             patch.object(cloud_monitor, "run_reserve_ca_check") as reserve_ca_check,
         ):
             cloud_monitor.run_checks(state, [])
 
-        checked_names = [call.args[0] for call in recreation_check.call_args_list]
+        checked_names = [call.args[1] for call in recreation_check.call_args_list]
         self.assertEqual(checked_names, ["upper_yosemite", "north_yosemite", "lower_yosemite"])
         reserve_ca_check.assert_not_called()
 

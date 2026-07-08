@@ -2,54 +2,62 @@
   "last_update_id": 0,
   "telegram_users": {
     "geronimo": {
-      "last_update_id": 0
+      "last_update_id": 0,
+      "monitors": {
+        "lower_yosemite": {
+          "checkin": "2026-09-01",
+          "checkout": "2026-09-03",
+          "enabled": false,
+          "last_alert_key": "",
+          "min_consecutive_nights": 2,
+          "mode": "any"
+        },
+        "north_yosemite": {
+          "checkin": "2026-09-01",
+          "checkout": "2026-09-03",
+          "enabled": false,
+          "last_alert_key": "",
+          "min_consecutive_nights": 2,
+          "mode": "any"
+        },
+        "upper_yosemite": {
+          "checkin": "2026-09-01",
+          "checkout": "2026-09-03",
+          "enabled": false,
+          "last_alert_key": "",
+          "min_consecutive_nights": 2,
+          "mode": "any"
+        }
+      }
     },
     "sophia": {
-      "last_update_id": 0
-    }
-  },
-  "monitors": {
-    "gold_bluffs_redwoods": {
-      "checkin": "2026-05-23",
-      "checkout": "2026-05-25",
-      "enabled": true,
-      "last_alert_key": ""
-    },
-    "lower_yosemite": {
-      "checkin": "2026-09-01",
-      "checkout": "2026-09-03",
-      "enabled": false,
-      "last_alert_key": ""
-    },
-    "north_summit_lassen": {
-      "checkin": "2026-09-01",
-      "checkout": "2026-09-03",
-      "enabled": false,
-      "last_alert_key": ""
-    },
-    "north_yosemite": {
-      "checkin": "2026-09-01",
-      "checkout": "2026-09-03",
-      "enabled": false,
-      "last_alert_key": ""
-    },
-    "prairie_redwoods": {
-      "checkin": "2026-05-24",
-      "checkout": "2026-05-26",
-      "enabled": true,
-      "last_alert_key": ""
-    },
-    "south_summit_lassen": {
-      "checkin": "2026-09-01",
-      "checkout": "2026-09-03",
-      "enabled": false,
-      "last_alert_key": ""
-    },
-    "upper_yosemite": {
-      "checkin": "2026-09-01",
-      "checkout": "2026-09-03",
-      "enabled": false,
-      "last_alert_key": ""
+      "last_update_id": 0,
+      "monitors": {
+        "lower_yosemite": {
+          "checkin": "2026-09-10",
+          "checkout": "2026-09-12",
+          "enabled": false,
+          "last_alert_key": "",
+          "min_consecutive_nights": 2,
+          "mode": "consecutive"
+        },
+        "north_yosemite": {
+          "checkin": "2026-09-10",
+          "checkout": "2026-09-12",
+          "enabled": false,
+          "last_alert_key": "",
+          "min_consecutive_nights": 2,
+          "mode": "consecutive"
+        },
+        "upper_yosemite": {
+          "checkin": "2026-09-10",
+          "checkout": "2026-09-12",
+          "enabled": false,
+          "last_alert_key": "",
+          "min_consecutive_nights": 2,
+          "mode": "consecutive"
+        }
+      }
     }
   }
 }
