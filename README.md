@@ -66,10 +66,10 @@ Send commands to your bot:
 - `/check upper yosemite` - run one campsite check
 - `/dates all 2026-05-22 2026-05-26` - set dates for every Yosemite campsite
 - `/dates upper yosemite 2026-05-22 2026-05-26` - set dates for one campsite
-- `/mode all any` - set every Yosemite campsite to any-night mode
-- `/mode upper yosemite any` - alert if any night is available
+- `/mode all consecutive 1` - alert if at least one night is available for every Yosemite campsite
 - `/mode all consecutive 3` - set every Yosemite campsite to three-consecutive-night mode
-- `/mode upper yosemite all` - alert only if every night is available
+- `/mode all all` - alert only if every night is available for every Yosemite campsite
+- `/mode upper yosemite all` - alert only if every night is available for one campsite
 - `/mode upper yosemite consecutive N` - alert if `N` consecutive nights are available
 
 Date ranges are scanned as one-night stays. For example,
@@ -78,7 +78,6 @@ May 24-25, and May 25-26 independently.
 
 Search modes are per user and per monitor:
 
-- `any` - alerts when at least one night in the selected range is available.
 - `all` - alerts only when every one-night stay in the selected range is available.
 - `consecutive N` - alerts when at least `N` consecutive one-night stays are available. `N` must be at least 1 and no larger than the selected date range.
 

@@ -144,11 +144,10 @@ class MonitorLogicTests(unittest.TestCase):
         )
         self.assertIn("Dates updated for: upper_yosemite, north_yosemite, lower_yosemite", send_telegram_to.call_args.args[1])
 
-    def test_mode_all_updates_every_user_monitor(self):
+    def test_mode_all_target_sets_consecutive_mode_for_every_user_monitor(self):
         state = cloud_monitor.default_state()
         updates = [
             {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/mode all consecutive 2"}},
-            {"update_id": 2, "message": {"chat": {"id": "123"}, "text": "/mode all any"}},
         ]
 
         with (
@@ -160,11 +159,29 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(force_checks, [])
         monitors = state["telegram_users"]["geronimo"]["monitors"]
         for name in cloud_monitor.monitor_targets():
-            self.assertEqual(monitors[name]["mode"], "any")
+            self.assertEqual(monitors[name]["mode"], "consecutive")
             self.assertEqual(monitors[name]["min_consecutive_nights"], 2)
         self.assertIn("Search mode updated for: upper_yosemite, north_yosemite, lower_yosemite", send_telegram_to.call_args.args[1])
 
-    def test_mode_consecutive_accepts_any_valid_number(self):
+    def test_mode_all_target_sets_complete_period_mode_for_every_user_monitor(self):
+        state = cloud_monitor.default_state()
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/mode all all"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        monitors = state["telegram_users"]["geronimo"]["monitors"]
+        for name in cloud_monitor.monitor_targets():
+            self.assertEqual(monitors[name]["mode"], "all")
+        self.assertIn("Search mode updated for: upper_yosemite, north_yosemite, lower_yosemite", send_telegram_to.call_args.args[1])
+
+    def test_mode_consecutive_accepts_arbitrary_valid_number(self):
         state = cloud_monitor.default_state()
         monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
         monitor["checkin"] = "2026-08-01"
@@ -200,10 +217,28 @@ class MonitorLogicTests(unittest.TestCase):
             force_checks = cloud_monitor.process_commands(state)
 
         self.assertEqual(force_checks, [])
-        self.assertEqual(monitor["mode"], "any")
-        self.assertEqual(monitor["min_consecutive_nights"], 2)
+        self.assertEqual(monitor["mode"], "consecutive")
+        self.assertEqual(monitor["min_consecutive_nights"], 1)
         self.assertIn("Cannot update search mode.", send_telegram_to.call_args.args[1])
         self.assertIn("only 3 night(s)", send_telegram_to.call_args.args[1])
+
+    def test_mode_consecutive_requires_number(self):
+        state = cloud_monitor.default_state()
+        monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/mode upper yosemite consecutive"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        self.assertEqual(monitor["mode"], "consecutive")
+        self.assertEqual(monitor["min_consecutive_nights"], 1)
+        self.assertIn("Usage: /mode MONITOR_NAME|all all|consecutive N", send_telegram_to.call_args.args[1])
 
     def test_dates_reject_range_shorter_than_existing_consecutive_mode(self):
         state = cloud_monitor.default_state()
@@ -252,7 +287,8 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertTrue(geronimo_monitor["enabled"])
         self.assertEqual(geronimo_monitor["checkin"], "2026-08-01")
         self.assertEqual(geronimo_monitor["checkout"], "2026-08-07")
-        self.assertEqual(geronimo_monitor["mode"], "any")
+        self.assertEqual(geronimo_monitor["mode"], "consecutive")
+        self.assertEqual(geronimo_monitor["min_consecutive_nights"], 1)
         self.assertFalse(sophia_monitor["enabled"])
         self.assertEqual(state["telegram_users"]["geronimo"]["last_update_id"], 6)
         self.assertEqual(state["telegram_users"]["sophia"]["last_update_id"], 7)
@@ -284,6 +320,26 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(monitor["checkin"], "2026-08-01")
         self.assertEqual(monitor["checkout"], "2026-08-07")
         self.assertEqual(monitor["mode"], "all")
+
+    def test_migrate_legacy_any_mode_to_consecutive_one(self):
+        raw = {
+            "telegram_users": {
+                "geronimo": {
+                    "monitors": {
+                        "upper_yosemite": {
+                            "mode": "any",
+                            "min_consecutive_nights": 2,
+                        },
+                    },
+                },
+            },
+        }
+
+        state = cloud_monitor.migrate_state(raw)
+
+        monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        self.assertEqual(monitor["mode"], "consecutive")
+        self.assertEqual(monitor["min_consecutive_nights"], 1)
 
     def test_monitor_targets_are_only_yosemite_pines(self):
         self.assertEqual(

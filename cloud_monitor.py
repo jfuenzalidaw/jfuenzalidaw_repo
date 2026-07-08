@@ -60,12 +60,11 @@ ACTIVE_MONITORS = (
 )
 
 SEARCH_MODES = {
-    "any": "any available night",
     "all": "every night in the date range",
     "consecutive": "at least N consecutive available nights",
 }
-DEFAULT_SEARCH_MODE = "any"
-DEFAULT_MIN_CONSECUTIVE_NIGHTS = 2
+DEFAULT_SEARCH_MODE = "consecutive"
+DEFAULT_MIN_CONSECUTIVE_NIGHTS = 1
 
 MONITOR_ALIASES = {
     "upper": "upper_yosemite",
@@ -149,6 +148,9 @@ def recreation_monitor_by_facility_id(facility_id: str) -> str | None:
 def normalize_monitor_settings(monitor: dict) -> dict:
     normalized = default_monitor_settings()
     normalized.update(monitor)
+    if normalized.get("mode") == "any":
+        normalized["mode"] = "consecutive"
+        normalized["min_consecutive_nights"] = 1
     if normalized.get("mode") not in SEARCH_MODES:
         normalized["mode"] = DEFAULT_SEARCH_MODE
     try:
@@ -597,10 +599,10 @@ def help_text(state: dict) -> str:
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n"
         "The range is checked one night at a time.\n\n"
         "Search mode\n"
-        "- /mode all any - alert if any night is available\n"
-        "- /mode upper yosemite any - alert if any night is available\n"
-        "- /mode all consecutive 3 - alert if 3 consecutive nights are available\n"
-        "- /mode upper yosemite all - alert only if every night is available\n"
+        "- /mode all consecutive 1 - alert if at least 1 night is available for every Yosemite campsite\n"
+        "- /mode all consecutive 3 - alert if 3 consecutive nights are available for every Yosemite campsite\n"
+        "- /mode all all - alert only if every night is available for every Yosemite campsite\n"
+        "- /mode upper yosemite all - alert only if every night is available for one campsite\n"
         "- /mode upper yosemite consecutive N - alert if N consecutive nights are available"
     )
 
@@ -610,19 +612,17 @@ def parse_mode_args(rest: str) -> tuple[str | None, int | None]:
     if not parts:
         return None, None
     mode = parts[0].lower()
-    if mode in {"any", "anyday", "any_day", "any-night", "any_night"}:
-        return "any", None
     if mode in {"all", "all-days", "all_days", "allnights", "all_nights"}:
         return "all", None
     if mode in {"consecutive", "consecutive-days", "consecutive_days", "consecutive-nights", "consecutive_nights"}:
-        min_nights = DEFAULT_MIN_CONSECUTIVE_NIGHTS
-        if len(parts) > 1:
-            try:
-                min_nights = int(parts[1])
-            except ValueError:
-                return None, None
-            if min_nights < 1:
-                return None, None
+        if len(parts) < 2:
+            return None, None
+        try:
+            min_nights = int(parts[1])
+        except ValueError:
+            return None, None
+        if min_nights < 1:
+            return None, None
         return "consecutive", min_nights
     return None, None
 
@@ -737,11 +737,11 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
             elif command == "/mode":
                 targets, mode_args = parse_target(rest)
                 if not targets:
-                    send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
+                    send_user_reply(user, "Usage: /mode MONITOR_NAME|all all|consecutive N\n\n" + monitors_text())
                     continue
                 mode, min_nights = parse_mode_args(mode_args)
                 if not mode:
-                    send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
+                    send_user_reply(user, "Usage: /mode MONITOR_NAME|all all|consecutive N\n\n" + monitors_text())
                     continue
                 if mode == "consecutive":
                     errors = [
@@ -768,8 +768,6 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
 
 def matching_available_nights(available_nights: list[dict], checkin: dt.date, checkout: dt.date, monitor: dict) -> list[dict]:
     mode = monitor.get("mode", DEFAULT_SEARCH_MODE)
-    if mode == "any":
-        return available_nights
 
     windows = date_windows(checkin, checkout)
     available_by_checkin = {night["checkin"]: night for night in available_nights}
