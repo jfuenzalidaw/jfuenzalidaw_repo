@@ -41,7 +41,7 @@
       "checkin": "2026-08-01",
       "checkout": "2026-08-07",
       "enabled": true,
-      "last_alert_key": ""
+      "last_alert_key": "2026-08-02:119"
     }
   },
   "telegram_users": {
