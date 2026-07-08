@@ -164,6 +164,70 @@ class MonitorLogicTests(unittest.TestCase):
             self.assertEqual(monitors[name]["min_consecutive_nights"], 2)
         self.assertIn("Search mode updated for: upper_yosemite, north_yosemite, lower_yosemite", send_telegram_to.call_args.args[1])
 
+    def test_mode_consecutive_accepts_any_valid_number(self):
+        state = cloud_monitor.default_state()
+        monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        monitor["checkin"] = "2026-08-01"
+        monitor["checkout"] = "2026-08-07"
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/mode upper yosemite consecutive 4"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        self.assertEqual(monitor["mode"], "consecutive")
+        self.assertEqual(monitor["min_consecutive_nights"], 4)
+        self.assertIn("Search mode updated for: upper_yosemite", send_telegram_to.call_args.args[1])
+
+    def test_mode_consecutive_rejects_number_larger_than_date_range(self):
+        state = cloud_monitor.default_state()
+        monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        monitor["checkin"] = "2026-08-01"
+        monitor["checkout"] = "2026-08-04"
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/mode upper yosemite consecutive 4"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        self.assertEqual(monitor["mode"], "any")
+        self.assertEqual(monitor["min_consecutive_nights"], 2)
+        self.assertIn("Cannot update search mode.", send_telegram_to.call_args.args[1])
+        self.assertIn("only 3 night(s)", send_telegram_to.call_args.args[1])
+
+    def test_dates_reject_range_shorter_than_existing_consecutive_mode(self):
+        state = cloud_monitor.default_state()
+        monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        monitor["checkin"] = "2026-09-01"
+        monitor["checkout"] = "2026-09-07"
+        monitor["mode"] = "consecutive"
+        monitor["min_consecutive_nights"] = 4
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/dates upper yosemite 2026-08-01 2026-08-04"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        self.assertEqual(monitor["checkin"], "2026-09-01")
+        self.assertEqual(monitor["checkout"], "2026-09-07")
+        self.assertIn("Cannot update dates.", send_telegram_to.call_args.args[1])
+        self.assertIn("date range has only 3 night(s)", send_telegram_to.call_args.args[1])
+
     def test_migrate_shared_monitor_state_into_geronimo_only(self):
         raw = {
             "last_update_id": 5,

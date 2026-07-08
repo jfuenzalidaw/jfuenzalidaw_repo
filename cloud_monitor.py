@@ -599,9 +599,9 @@ def help_text(state: dict) -> str:
         "Search mode\n"
         "- /mode all any - alert if any night is available\n"
         "- /mode upper yosemite any - alert if any night is available\n"
-        "- /mode all consecutive 2 - alert if 2 consecutive nights are available\n"
+        "- /mode all consecutive 3 - alert if 3 consecutive nights are available\n"
         "- /mode upper yosemite all - alert only if every night is available\n"
-        "- /mode upper yosemite consecutive 2 - alert if 2 consecutive nights are available"
+        "- /mode upper yosemite consecutive N - alert if N consecutive nights are available"
     )
 
 
@@ -618,11 +618,29 @@ def parse_mode_args(rest: str) -> tuple[str | None, int | None]:
         min_nights = DEFAULT_MIN_CONSECUTIVE_NIGHTS
         if len(parts) > 1:
             try:
-                min_nights = max(1, int(parts[1]))
+                min_nights = int(parts[1])
             except ValueError:
+                return None, None
+            if min_nights < 1:
                 return None, None
         return "consecutive", min_nights
     return None, None
+
+
+def monitor_date_range_nights(monitor: dict) -> int:
+    checkin = dt.date.fromisoformat(monitor["checkin"])
+    checkout = dt.date.fromisoformat(monitor["checkout"])
+    return max(0, (checkout - checkin).days)
+
+
+def consecutive_range_error(target: str, monitor: dict, min_nights: int) -> str | None:
+    range_nights = monitor_date_range_nights(monitor)
+    if min_nights <= range_nights:
+        return None
+    return (
+        f"{target} has only {range_nights} night(s) in its date range. "
+        f"Use /dates first or choose consecutive {range_nights} or less."
+    )
 
 
 def process_commands(state: dict) -> list[tuple[str, str]]:
@@ -692,6 +710,15 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
                     checkout = dt.date.fromisoformat(co_s)
                     if checkout <= checkin:
                         raise ValueError("checkout must be after checkin")
+                    range_nights = (checkout - checkin).days
+                    for target in targets:
+                        monitor = user_state["monitors"][target]
+                        if monitor.get("mode") == "consecutive":
+                            min_nights = int(monitor.get("min_consecutive_nights", DEFAULT_MIN_CONSECUTIVE_NIGHTS))
+                            if min_nights > range_nights:
+                                raise ValueError(
+                                    f"{target} is set to consecutive {min_nights}, but this date range has only {range_nights} night(s)."
+                                )
                     for target in targets:
                         monitor = user_state["monitors"][target]
                         monitor["checkin"] = checkin.isoformat()
@@ -699,6 +726,12 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
                         monitor["last_alert_key"] = ""
                         force_checks.add((user["id"], target))
                     send_user_reply(user, "Dates updated for: " + ", ".join(targets))
+                except ValueError as exc:
+                    message = str(exc)
+                    if message and "date range has only" in message:
+                        send_user_reply(user, "Cannot update dates.\n\n" + message)
+                    else:
+                        send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
                 except Exception:
                     send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
             elif command == "/mode":
@@ -710,6 +743,15 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
                 if not mode:
                     send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
                     continue
+                if mode == "consecutive":
+                    errors = [
+                        error
+                        for target in targets
+                        if (error := consecutive_range_error(target, user_state["monitors"][target], min_nights or DEFAULT_MIN_CONSECUTIVE_NIGHTS))
+                    ]
+                    if errors:
+                        send_user_reply(user, "Cannot update search mode.\n\n" + "\n".join(errors))
+                        continue
                 for target in targets:
                     monitor = user_state["monitors"][target]
                     monitor["mode"] = mode

@@ -68,9 +68,9 @@ Send commands to your bot:
 - `/dates upper yosemite 2026-05-22 2026-05-26` - set dates for one campsite
 - `/mode all any` - set every Yosemite campsite to any-night mode
 - `/mode upper yosemite any` - alert if any night is available
-- `/mode all consecutive 2` - set every Yosemite campsite to two-consecutive-night mode
+- `/mode all consecutive 3` - set every Yosemite campsite to three-consecutive-night mode
 - `/mode upper yosemite all` - alert only if every night is available
-- `/mode upper yosemite consecutive 2` - alert if two consecutive nights are available
+- `/mode upper yosemite consecutive N` - alert if `N` consecutive nights are available
 
 Date ranges are scanned as one-night stays. For example,
 `/dates upper yosemite 2026-05-22 2026-05-26` checks May 22-23, May 23-24,
@@ -80,7 +80,7 @@ Search modes are per user and per monitor:
 
 - `any` - alerts when at least one night in the selected range is available.
 - `all` - alerts only when every one-night stay in the selected range is available.
-- `consecutive N` - alerts when at least `N` consecutive one-night stays are available.
+- `consecutive N` - alerts when at least `N` consecutive one-night stays are available. `N` must be at least 1 and no larger than the selected date range.
 
 Old campground grouping commands such as `/campgrounds yosemite ...` are no
 longer used. Use the individual monitor names above instead.
