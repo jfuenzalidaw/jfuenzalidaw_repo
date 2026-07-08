@@ -34,28 +34,28 @@
       "last_update_id": 606628368,
       "monitors": {
         "lower_yosemite": {
-          "checkin": "2026-07-09",
-          "checkout": "2026-07-12",
-          "enabled": false,
+          "checkin": "2026-08-01",
+          "checkout": "2026-08-07",
+          "enabled": true,
           "last_alert_key": "",
           "min_consecutive_nights": 2,
-          "mode": "any"
+          "mode": "consecutive"
         },
         "north_yosemite": {
-          "checkin": "2026-07-09",
-          "checkout": "2026-07-12",
-          "enabled": false,
+          "checkin": "2026-08-01",
+          "checkout": "2026-08-07",
+          "enabled": true,
           "last_alert_key": "",
           "min_consecutive_nights": 2,
-          "mode": "any"
+          "mode": "consecutive"
         },
         "upper_yosemite": {
-          "checkin": "2026-07-09",
-          "checkout": "2026-07-12",
-          "enabled": false,
+          "checkin": "2026-08-01",
+          "checkout": "2026-08-07",
+          "enabled": true,
           "last_alert_key": "",
           "min_consecutive_nights": 2,
-          "mode": "any"
+          "mode": "consecutive"
         }
       }
     }
