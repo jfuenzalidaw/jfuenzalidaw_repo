@@ -151,6 +151,34 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(state["telegram_users"]["geronimo"]["last_update_id"], 6)
         self.assertEqual(state["telegram_users"]["sophia"]["last_update_id"], 7)
 
+    def test_migrate_new_user_state_does_not_apply_legacy_defaults(self):
+        raw = {
+            "last_update_id": 5,
+            "telegram_users": {
+                "geronimo": {
+                    "last_update_id": 6,
+                    "monitors": {
+                        "upper_yosemite": {
+                            "enabled": True,
+                            "checkin": "2026-08-01",
+                            "checkout": "2026-08-07",
+                            "last_alert_key": "",
+                            "mode": "all",
+                            "min_consecutive_nights": 2,
+                        },
+                    },
+                },
+            },
+        }
+
+        state = cloud_monitor.migrate_state(raw)
+
+        monitor = state["telegram_users"]["geronimo"]["monitors"]["upper_yosemite"]
+        self.assertTrue(monitor["enabled"])
+        self.assertEqual(monitor["checkin"], "2026-08-01")
+        self.assertEqual(monitor["checkout"], "2026-08-07")
+        self.assertEqual(monitor["mode"], "all")
+
     def test_monitor_targets_are_only_yosemite_pines(self):
         self.assertEqual(
             cloud_monitor.monitor_targets(),

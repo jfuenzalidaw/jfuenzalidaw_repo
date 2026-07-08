@@ -216,6 +216,8 @@ def migrate_state(raw: dict) -> dict:
                 state["telegram_users"][user_id]["last_update_id"] = raw_user_state.get("last_update_id", legacy_update_id)
     if "monitors" in raw:
         return state
+    if "telegram_users" in raw:
+        return state
 
     # Backward compatibility with the original single Yosemite monitor state.
     state["telegram_users"]["geronimo"]["last_update_id"] = legacy_update_id
