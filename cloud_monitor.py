@@ -592,11 +592,14 @@ def help_text(state: dict) -> str:
         "- /check upper yosemite - check one campsite once\n"
         "- /monitors - list every available Yosemite campsite name\n\n"
         "Change dates\n"
+        "- /dates all 2026-05-22 2026-05-26\n"
         "- /dates upper yosemite 2026-05-22 2026-05-26\n"
         "Dates use YYYY-MM-DD. Checkout must be after checkin.\n"
         "The range is checked one night at a time.\n\n"
         "Search mode\n"
+        "- /mode all any - alert if any night is available\n"
         "- /mode upper yosemite any - alert if any night is available\n"
+        "- /mode all consecutive 2 - alert if 2 consecutive nights are available\n"
         "- /mode upper yosemite all - alert only if every night is available\n"
         "- /mode upper yosemite consecutive 2 - alert if 2 consecutive nights are available"
     )
@@ -680,7 +683,7 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
                 send_user_reply(user, "Settings are managed in GitHub/cron-job.org now. Use /help for bot commands.")
             elif command == "/dates":
                 targets, date_args = parse_target(rest)
-                if len(targets) != 1:
+                if not targets:
                     send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
                     continue
                 try:
@@ -689,29 +692,31 @@ def process_commands(state: dict) -> list[tuple[str, str]]:
                     checkout = dt.date.fromisoformat(co_s)
                     if checkout <= checkin:
                         raise ValueError("checkout must be after checkin")
-                    monitor = user_state["monitors"][targets[0]]
-                    monitor["checkin"] = checkin.isoformat()
-                    monitor["checkout"] = checkout.isoformat()
-                    monitor["last_alert_key"] = ""
-                    force_checks.add((user["id"], targets[0]))
-                    send_user_reply(user, f"{targets[0]} dates updated: {monitor['checkin']} to {monitor['checkout']}")
+                    for target in targets:
+                        monitor = user_state["monitors"][target]
+                        monitor["checkin"] = checkin.isoformat()
+                        monitor["checkout"] = checkout.isoformat()
+                        monitor["last_alert_key"] = ""
+                        force_checks.add((user["id"], target))
+                    send_user_reply(user, "Dates updated for: " + ", ".join(targets))
                 except Exception:
                     send_user_reply(user, "Usage: /dates MONITOR_NAME YYYY-MM-DD YYYY-MM-DD\n\n" + monitors_text())
             elif command == "/mode":
                 targets, mode_args = parse_target(rest)
-                if len(targets) != 1:
+                if not targets:
                     send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
                     continue
                 mode, min_nights = parse_mode_args(mode_args)
                 if not mode:
                     send_user_reply(user, "Usage: /mode MONITOR_NAME any|all|consecutive [N]\n\n" + monitors_text())
                     continue
-                monitor = user_state["monitors"][targets[0]]
-                monitor["mode"] = mode
-                if min_nights is not None:
-                    monitor["min_consecutive_nights"] = min_nights
-                monitor["last_alert_key"] = ""
-                send_user_reply(user, "Search mode updated.\n\n" + monitor_status(targets[0], monitor))
+                for target in targets:
+                    monitor = user_state["monitors"][target]
+                    monitor["mode"] = mode
+                    if min_nights is not None:
+                        monitor["min_consecutive_nights"] = min_nights
+                    monitor["last_alert_key"] = ""
+                send_user_reply(user, "Search mode updated for: " + ", ".join(targets))
             elif command == "/campgrounds":
                 send_user_reply(user, "Campground groups were removed. Use each campsite by name.\n\n" + monitors_text())
             else:

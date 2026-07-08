@@ -122,6 +122,48 @@ class MonitorLogicTests(unittest.TestCase):
         self.assertEqual(sophia_monitor["min_consecutive_nights"], 2)
         self.assertEqual(force_checks, [("geronimo", "upper_yosemite"), ("sophia", "upper_yosemite")])
 
+    def test_dates_all_updates_every_user_monitor(self):
+        state = cloud_monitor.default_state()
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/dates all 2026-08-01 2026-08-07"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        monitors = state["telegram_users"]["geronimo"]["monitors"]
+        for name in cloud_monitor.monitor_targets():
+            self.assertEqual(monitors[name]["checkin"], "2026-08-01")
+            self.assertEqual(monitors[name]["checkout"], "2026-08-07")
+        self.assertEqual(
+            force_checks,
+            [("geronimo", "lower_yosemite"), ("geronimo", "north_yosemite"), ("geronimo", "upper_yosemite")],
+        )
+        self.assertIn("Dates updated for: upper_yosemite, north_yosemite, lower_yosemite", send_telegram_to.call_args.args[1])
+
+    def test_mode_all_updates_every_user_monitor(self):
+        state = cloud_monitor.default_state()
+        updates = [
+            {"update_id": 1, "message": {"chat": {"id": "123"}, "text": "/mode all consecutive 2"}},
+            {"update_id": 2, "message": {"chat": {"id": "123"}, "text": "/mode all any"}},
+        ]
+
+        with (
+            patch.object(cloud_monitor, "get_updates", return_value=updates),
+            patch.object(cloud_monitor, "send_telegram_to") as send_telegram_to,
+        ):
+            force_checks = cloud_monitor.process_commands(state)
+
+        self.assertEqual(force_checks, [])
+        monitors = state["telegram_users"]["geronimo"]["monitors"]
+        for name in cloud_monitor.monitor_targets():
+            self.assertEqual(monitors[name]["mode"], "any")
+            self.assertEqual(monitors[name]["min_consecutive_nights"], 2)
+        self.assertIn("Search mode updated for: upper_yosemite, north_yosemite, lower_yosemite", send_telegram_to.call_args.args[1])
+
     def test_migrate_shared_monitor_state_into_geronimo_only(self):
         raw = {
             "last_update_id": 5,

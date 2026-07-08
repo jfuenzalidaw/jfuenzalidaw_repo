@@ -64,8 +64,11 @@ Send commands to your bot:
 - `/stop upper yosemite` - turn one campsite off
 - `/check all` - run one check for every Yosemite campsite on the next workflow run
 - `/check upper yosemite` - run one campsite check
+- `/dates all 2026-05-22 2026-05-26` - set dates for every Yosemite campsite
 - `/dates upper yosemite 2026-05-22 2026-05-26` - set dates for one campsite
+- `/mode all any` - set every Yosemite campsite to any-night mode
 - `/mode upper yosemite any` - alert if any night is available
+- `/mode all consecutive 2` - set every Yosemite campsite to two-consecutive-night mode
 - `/mode upper yosemite all` - alert only if every night is available
 - `/mode upper yosemite consecutive 2` - alert if two consecutive nights are available
 
