@@ -31,14 +31,14 @@
       }
     },
     "sophia": {
-      "last_update_id": 606628368,
+      "last_update_id": 606628371,
       "monitors": {
         "lower_yosemite": {
           "checkin": "2026-08-01",
           "checkout": "2026-08-07",
           "enabled": true,
           "last_alert_key": "",
-          "min_consecutive_nights": 2,
+          "min_consecutive_nights": 1,
           "mode": "consecutive"
         },
         "north_yosemite": {
@@ -46,7 +46,7 @@
           "checkout": "2026-08-07",
           "enabled": true,
           "last_alert_key": "",
-          "min_consecutive_nights": 2,
+          "min_consecutive_nights": 1,
           "mode": "consecutive"
         },
         "upper_yosemite": {
@@ -54,7 +54,7 @@
           "checkout": "2026-08-07",
           "enabled": true,
           "last_alert_key": "",
-          "min_consecutive_nights": 2,
+          "min_consecutive_nights": 1,
           "mode": "consecutive"
         }
       }
