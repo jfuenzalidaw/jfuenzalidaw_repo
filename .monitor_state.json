@@ -37,7 +37,7 @@
           "checkin": "2026-08-01",
           "checkout": "2026-08-07",
           "enabled": true,
-          "last_alert_key": "consecutive:1:2026-08-02:939",
+          "last_alert_key": "",
           "min_consecutive_nights": 1,
           "mode": "consecutive"
         },
@@ -53,7 +53,7 @@
           "checkin": "2026-08-01",
           "checkout": "2026-08-07",
           "enabled": true,
-          "last_alert_key": "",
+          "last_alert_key": "consecutive:1:2026-08-06:166",
           "min_consecutive_nights": 1,
           "mode": "consecutive"
         }
