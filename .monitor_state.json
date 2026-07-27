@@ -1,13 +1,13 @@
 {
-  "last_update_id": 55343213,
+  "last_update_id": 55343214,
   "telegram_users": {
     "geronimo": {
-      "last_update_id": 55343213,
+      "last_update_id": 55343214,
       "monitors": {
         "lower_yosemite": {
           "checkin": "2026-08-01",
           "checkout": "2026-08-07",
-          "enabled": true,
+          "enabled": false,
           "last_alert_key": "",
           "min_consecutive_nights": 2,
           "mode": "consecutive"
@@ -15,7 +15,7 @@
         "north_yosemite": {
           "checkin": "2026-08-01",
           "checkout": "2026-08-07",
-          "enabled": true,
+          "enabled": false,
           "last_alert_key": "",
           "min_consecutive_nights": 2,
           "mode": "consecutive"
@@ -23,7 +23,7 @@
         "upper_yosemite": {
           "checkin": "2026-08-01",
           "checkout": "2026-08-07",
-          "enabled": true,
+          "enabled": false,
           "last_alert_key": "",
           "min_consecutive_nights": 2,
           "mode": "consecutive"
